@@ -19,7 +19,7 @@
           :key="'l-' + line.id"
           :points="line.points"
           :stroke="line.color"
-          stroke-width="5"
+          :stroke-width="baseLineWidth"
           stroke-linejoin="round"
           stroke-linecap="round"
           fill="none"
@@ -32,7 +32,7 @@
           :key="'h-' + i"
           :points="seg.points"
           :stroke="seg.color"
-          stroke-width="7"
+          :stroke-width="baseLineWidthHL"
           stroke-linejoin="round"
           stroke-linecap="round"
           fill="none"
@@ -40,49 +40,49 @@
         />
         <!-- 站点 -->
         <g v-for="s in stations" :key="'s-' + s.id">
-          <!-- 换乘站：单层圆圈（白底+描边，类似示例 SVG）+ 内部双箭头 -->
+          <!-- 换乘站：白底大圆 + 描边 + 内部双向箭头 -->
           <template v-if="s.isTransfer">
             <circle
               :cx="s.x"
               :cy="s.y"
-              :r="s.highlight ? 7.5 : 6"
+              :r="svgRadius(s)"
               :fill="s.highlight ? s.fill : '#fff'"
               :stroke="s.highlight ? s.stroke : '#1a1d24'"
-              :stroke-width="s.highlight ? 2.5 : 1.8"
+              :stroke-width="baseStrokeWidth"
               @click.stop="$emit('select-station', s.id)"
               style="cursor: pointer"
             />
             <path
-              :d="transferIconPath(s.x, s.y, s.highlight ? 5.5 : 4.2)"
+              :d="transferIconPath(s.x, s.y, svgRadius(s) * 0.7)"
               fill="none"
               :stroke="s.highlight ? '#fff' : '#1a1d24'"
-              stroke-width="1.1"
+              :stroke-width="baseStrokeWidth * 0.8"
               stroke-linecap="round"
               stroke-linejoin="round"
               pointer-events="none"
             />
           </template>
-          <!-- 普通站 / 起终点：单层圆圈 -->
+          <!-- 普通站 / 起终点：实心圆圈 -->
           <circle
             v-else
             :cx="s.x"
             :cy="s.y"
-            :r="s.highlight ? 6.5 : 3.5"
+            :r="svgRadius(s)"
             :fill="s.fill"
             :stroke="s.stroke"
-            :stroke-width="s.highlight ? 2.5 : 1.5"
+            :stroke-width="baseStrokeWidth"
             @click.stop="$emit('select-station', s.id)"
             style="cursor: pointer"
           />
           <text
             v-if="labelData.get(s.id)?.visible"
-            :x="s.x + (labelData.get(s.id)?.dx ?? (s.isTransfer ? 10 : 6))"
-            :y="s.y + (labelData.get(s.id)?.dy ?? 4)"
+            :x="s.x + (labelData.get(s.id)?.dx ?? 0)"
+            :y="s.y + (labelData.get(s.id)?.dy ?? 0)"
             :text-anchor="labelData.get(s.id)?.anchor ?? 'start'"
-            :font-size="s.isTransfer ? 12 : 11"
-            :font-weight="s.isTransfer ? 600 : 400"
+            :font-size="baseFontSize"
+            :font-weight="s.isTransfer || s.highlight ? 600 : 400"
             :fill="s.highlight ? '#fff' : 'var(--text)'"
-            style="pointer-events: none; paint-order: stroke; stroke: rgba(0,0,0,0.75); stroke-width: 2.5px"
+            style="pointer-events: none; paint-order: stroke; stroke: rgba(0,0,0,0.8); stroke-width: 3px"
           >{{ s.name }}</text>
         </g>
       </g>
@@ -111,7 +111,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onMounted, nextTick } from 'vue'
+import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { computeBounds, makeProjection } from '../lib/projection.js'
 
 const props = defineProps({
@@ -137,6 +137,50 @@ const proj = computed(() => {
 })
 
 const dimmed = computed(() => props.highlight && props.highlight.length > 0)
+
+// --- SVG 容器尺寸追踪（用于计算自适应基础尺寸）---
+const svgRect = ref({ width: 0, height: 0 })
+let resizeObserver = null
+
+// SVG viewBox 适配到容器的缩放比（仅跟设备屏幕尺寸有关，不受用户缩放影响）
+const fitScale = computed(() => {
+  const vbW = proj.value.width || 1000
+  const vbH = proj.value.height || 800
+  const { width, height } = svgRect.value
+  if (!width || !height) return 1
+  return Math.min(width / vbW, height / vbH)
+})
+
+// 自适应基础尺寸：使用平方根补偿（部分补偿 fitScale）
+// 完全补偿（/fitScale）会导致手机端 SVG 坐标系中值过大，文字比站间距还宽
+// 平方根补偿（/sqrt(fitScale)）在手机端折中：屏幕值略小但 SVG 比例合理
+// 这些值在 SVG 坐标系中，会随用户缩放（scale）自然等比缩放
+const FONT_TARGET = 11   // 屏幕上目标字号（px）
+const RADIUS_NORMAL = 3   // 普通站屏幕目标半径
+const RADIUS_TRANSFER = 5 // 换乘站屏幕目标半径
+const RADIUS_HIGHLIGHT = 6 // 高亮站屏幕目标半径
+const LINE_W = 4          // 线路屏幕目标宽度
+const LINE_W_HL = 6       // 高亮线路屏幕目标宽度
+const STROKE_W = 1.3      // 站点描边屏幕目标宽度
+
+// 平方根补偿：fitScale=0.375 时补偿因子=1.63（而非完全补偿的 2.67）
+function adapt(v) {
+  return v / Math.sqrt(fitScale.value || 1)
+}
+
+const baseFontSize = computed(() => adapt(FONT_TARGET))
+const baseRadiusNormal = computed(() => adapt(RADIUS_NORMAL))
+const baseRadiusTransfer = computed(() => adapt(RADIUS_TRANSFER))
+const baseRadiusHighlight = computed(() => adapt(RADIUS_HIGHLIGHT))
+const baseLineWidth = computed(() => adapt(LINE_W))
+const baseLineWidthHL = computed(() => adapt(LINE_W_HL))
+const baseStrokeWidth = computed(() => adapt(STROKE_W))
+
+// 站点 SVG 半径（会随用户缩放一起缩放）
+function svgRadius(s) {
+  if (s.highlight) return baseRadiusHighlight.value
+  return s.isTransfer ? baseRadiusTransfer.value : baseRadiusNormal.value
+}
 
 const stationCoords = computed(() => {
   const map = {}
@@ -209,6 +253,57 @@ const highlightPolys = computed(() => {
   return segs
 })
 
+// 所有线路段（用于标签与线路碰撞检测）
+const lineSegments = computed(() => {
+  if (!props.cityData) return []
+  const p = proj.value
+  const segs = []
+  for (const line of props.cityData.lines || []) {
+    let pts = []
+    if (line.path && line.path.length > 0) {
+      pts = line.path.map(([x, y]) => p.projectXY(x, y))
+    } else {
+      const c = stationCoords.value
+      pts = (line.stationIds || []).map(id => c[id]).filter(Boolean)
+    }
+    for (let i = 1; i < pts.length; i++) {
+      segs.push({ x1: pts[i - 1].x, y1: pts[i - 1].y, x2: pts[i].x, y2: pts[i].y })
+    }
+  }
+  return segs
+})
+
+// 每个站点ID的线路方向角度（0=水平, 90=垂直），用于标签垂直放置
+const stationAngles = computed(() => {
+  const angles = new Map()
+  if (!props.cityData) return angles
+  const c = stationCoords.value
+  for (const line of props.cityData.lines || []) {
+    const ids = line.stationIds || []
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i]
+      const co = c[id]
+      if (!co) continue
+      const prevCo = i > 0 ? c[ids[i - 1]] : null
+      const nextCo = i < ids.length - 1 ? c[ids[i + 1]] : null
+      const vectors = []
+      if (prevCo) vectors.push([co.x - prevCo.x, co.y - prevCo.y])
+      if (nextCo) vectors.push([nextCo.x - co.x, nextCo.y - co.y])
+      if (!vectors.length) continue
+      let ax = 0, ay = 0
+      for (const [vx, vy] of vectors) { ax += vx; ay += vy }
+      const angle = Math.atan2(Math.abs(ay), Math.abs(ax)) * 180 / Math.PI
+      if (!angles.has(id)) angles.set(id, [])
+      angles.get(id).push(angle)
+    }
+  }
+  const result = new Map()
+  for (const [id, list] of angles) {
+    result.set(id, list.reduce((a, b) => a + b, 0) / list.length)
+  }
+  return result
+})
+
 const legendOpen = ref(false)
 
 // 切换图例折叠/展开
@@ -241,57 +336,119 @@ const stations = computed(() => {
     if (isStart) { fill = '#22c55e'; stroke = '#fff' }
     else if (isEnd) { fill = '#ef4444'; stroke = '#fff' }
     else if (onRoute) { fill = '#fff'; stroke = '#4a9eff' }
+    // 聚合同名站（换乘站）的所有线路方向角度
+    const angleList = dupIds
+      .map(did => stationAngles.value.get(did))
+      .filter(a => a != null)
+    const lineAngle = angleList.length
+      ? angleList.reduce((a, b) => a + b, 0) / angleList.length
+      : 45
     return {
       id, name: st.name, x: co.x, y: co.y, fill, stroke, highlight,
-      isTransfer, lines
+      isTransfer, lines, lineAngle
     }
   })
 })
 
+// 有效缩放比 = 设备适配缩放 × 用户缩放（决定标签密度）
+const effectiveScale = computed(() => (fitScale.value || 1) * scale.value)
+
 function showLabel(s) {
-  // 所有站点全部显示（依靠 4 方向防重叠来避免遮挡，只有 4 个位置都冲突时才隐藏）
+  // 有效缩放比低时（如手机端默认视图），仅显示换乘站和高亮站
+  if (effectiveScale.value < 0.5 && !s.isTransfer && !s.highlight) {
+    return false
+  }
   return true
 }
 
-// 标签防重叠 2.0：
-// 1) 按优先级排序：高亮站（起终点/路径站） > 换乘站 > 普通站
-//    确保关键站点优先拿到标签位置
-// 2) 每个站点尝试 4 个位置（右、上、左、下），选第一个不冲突的位置
-// 3) 返回 Map<id, {visible, dx, dy, anchor}>
+// 线段-矩形相交检测（用于判断标签是否压住线路）
+function segsIntersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+  const d = (x2 - x1) * (y4 - y3) - (y2 - y1) * (x4 - x3)
+  if (d === 0) return false
+  const t = ((x3 - x1) * (y4 - y3) - (y3 - y1) * (x4 - x3)) / d
+  const u = ((x3 - x1) * (y2 - y1) - (y3 - y1) * (x2 - x1)) / d
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1
+}
+
+function segCrossesRect(x1, y1, x2, y2, rx, ry, rw, rh) {
+  if (x1 >= rx && x1 <= rx + rw && y1 >= ry && y1 <= ry + rh) return true
+  if (x2 >= rx && x2 <= rx + rw && y2 >= ry && y2 <= ry + rh) return true
+  return (
+    segsIntersect(x1, y1, x2, y2, rx, ry, rx + rw, ry) ||
+    segsIntersect(x1, y1, x2, y2, rx, ry + rh, rx + rw, ry + rh) ||
+    segsIntersect(x1, y1, x2, y2, rx, ry, rx, ry + rh) ||
+    segsIntersect(x1, y1, x2, y2, rx + rw, ry, rx + rw, ry + rh)
+  )
+}
+
+// 点到线段的最短距离（用于判断线段是否经过站点）
+function pointToSegDist(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1
+  if (dx === 0 && dy === 0) return Math.hypot(px - x1, py - y1)
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
+  return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+}
+
+// 标签防重叠 5.0（线路方向感知 + 线路碰撞检测）：
+// 1) 按优先级排序：高亮站 > 换乘站 > 普通站
+// 2) 根据站点线路方向选择垂直方向放置（水平线→上下放, 垂直线→左右放）
+// 3) 检测标签与线路碰撞，避免文字压住线路
+// 4) 检测标签之间碰撞，避免文字重叠
 const labelData = computed(() => {
   const list = stations.value
   const result = new Map()
   if (!list.length) return result
 
-  // 排序：优先级高的先分配标签
   const sorted = [...list].sort((a, b) => {
     const pa = a.highlight ? 0 : (a.isTransfer ? 1 : 2)
     const pb = b.highlight ? 0 : (b.isTransfer ? 1 : 2)
     if (pa !== pb) return pa - pb
-    // 同优先级按线路数多的排前
     return (b.lines?.length || 0) - (a.lines?.length || 0)
   })
 
-  const sc = scale.value
-  const charW = 9
-  const charH = 13
-  const padX = 2
-  const padY = 1
+  const fs = baseFontSize.value
+  const charW = fs
+  const charH = fs * 1.2
+  const padX = fs * 0.15
+  const padY = fs * 0.1
+  const gap = fs * 0.25
 
-  // 4 个候选偏移（dx, dy, anchor）
-  //   相对 SVG 坐标：SVG y 轴向下，文本 baseline 在 y 上
-  const candidates = [
-    // 右侧：文字右对齐在站点右侧
-    { pos: 'right',  dx: 0,  dy: 0,   anchor: 'start',  offsetX: (s) => (s.isTransfer ? 10 : 7), offsetY: () => 4 },
-    // 上方：文本水平居中在站点上方
-    { pos: 'top',    dx: 0,  dy: 0,   anchor: 'middle', offsetX: () => 0,             offsetY: (s) => -(s.isTransfer ? 9 : 7) },
-    // 左侧：文字右对齐在站点左侧
-    { pos: 'left',   dx: 0,  dy: 0,   anchor: 'end',    offsetX: (s) => -(s.isTransfer ? 10 : 7), offsetY: () => 4 },
-    // 下方：文本水平居中在站点下方
-    { pos: 'bottom', dx: 0,  dy: 0,   anchor: 'middle', offsetX: () => 0,             offsetY: () => charH + 5 }
-  ]
+  const visR = (s) => svgRadius(s) + baseStrokeWidth.value
+  const segs = lineSegments.value
 
-  const placed = [] // 已放置标签矩形（屏幕坐标）
+  // 根据线路方向返回候选位置顺序（8 个方向：4 正向 + 4 对角）
+  function getCandidates(s) {
+    const isHorizontal = s.lineAngle < 45
+    const r = visR(s) + gap
+    const diag = r * 0.707 // 对角线偏移（cos45°）
+    const right = { anchor: 'start',  offsetX: r,     offsetY: charH * 0.35 }
+    const left  = { anchor: 'end',    offsetX: -r,    offsetY: charH * 0.35 }
+    const top   = { anchor: 'middle', offsetX: 0,     offsetY: -r }
+    const bot   = { anchor: 'middle', offsetX: 0,     offsetY: r + charH }
+    // 对角线位置（提供更多避开线路的选项）
+    const tr = { anchor: 'start',  offsetX: diag,  offsetY: -diag }
+    const tl = { anchor: 'end',    offsetX: -diag, offsetY: -diag }
+    const br = { anchor: 'start',  offsetX: diag,  offsetY: diag + charH }
+    const bl = { anchor: 'end',    offsetX: -diag, offsetY: diag + charH }
+    // 水平线路→优先上下+对角，垂直线路→优先左右+对角
+    return isHorizontal
+      ? [top, bot, tr, tl, br, bl, right, left]
+      : [right, left, tr, tl, br, bl, top, bot]
+  }
+
+  // 计算标签矩形压住的线路段数量（排除经过站点自身的线段）
+  function countLineCollisions(s, bx, by, bw, bh) {
+    const skipDist = visR(s) + baseLineWidth.value // 站点圆圈 + 线宽
+    let count = 0
+    for (const seg of segs) {
+      // 跳过经过站点自身的线段（点到线段距离 < 站点半径+线宽）
+      if (pointToSegDist(s.x, s.y, seg.x1, seg.y1, seg.x2, seg.y2) < skipDist) continue
+      if (segCrossesRect(seg.x1, seg.y1, seg.x2, seg.y2, bx, by, bw, bh)) count++
+    }
+    return count
+  }
+
+  const placed = []
 
   for (const s of sorted) {
     if (!showLabel(s)) { result.set(s.id, { visible: false }); continue }
@@ -300,84 +457,68 @@ const labelData = computed(() => {
     const bw = nameLen * charW + padX * 2
     const bh = charH + padY * 2
 
-    let placedOk = false
-
-    // 换乘站和高亮站：强制显示（跳过冲突检查，或只记录占用）
     const forceShow = s.highlight || s.isTransfer
+    const candidates = getCandidates(s)
 
-    for (let ci = 0; ci < candidates.length; ci++) {
-      const c = candidates[ci]
-      const offX = c.offsetX(s)
-      const offY = c.offsetY(s)
-      // 文本坐标
-      const tx_ = s.x + offX
-      const ty_ = s.y + offY
+    // 评分制：遍历所有候选位置，选择压线最少的
+    let bestCandidate = null
+    let bestCollisions = Infinity
+    // 回退候选（有标签碰撞但线路碰撞最少）
+    let fallbackCandidate = null
+    let fallbackCollisions = Infinity
 
-      // 文本 bounding box（世界坐标）：根据 anchor 计算起点 x1
-      let bx, by
-      if (c.anchor === 'start') {
-        bx = tx_ - padX
-      } else if (c.anchor === 'end') {
-        bx = tx_ - bw + padX
-      } else {
-        bx = tx_ - bw / 2
-      }
-      // y = baseline，文本实际占据 (y - charH) ~ y 范围内的高度
-      by = ty_ - charH - padY
+    for (const c of candidates) {
+      const tx_ = s.x + c.offsetX
+      const ty_ = s.y + c.offsetY
 
-      // 转为屏幕坐标做碰撞检测
-      const sx1 = (bx + tx.value) * sc
-      const sy1 = (by + ty.value) * sc
-      const sx2 = sx1 + bw * sc
-      const sy2 = sy1 + bh * sc
+      let bx
+      if (c.anchor === 'start') bx = tx_ - padX
+      else if (c.anchor === 'end') bx = tx_ - bw + padX
+      else bx = tx_ - bw / 2
+      const by = ty_ - charH - padY
 
-      // 检测与已放置矩形是否碰撞
-      let collide = false
+      const lineCol = countLineCollisions(s, bx, by, bw, bh)
+
+      // 检测标签之间的碰撞
+      let labelCollide = false
       for (const r of placed) {
-        if (!(sx2 < r.x1 || sx1 > r.x2 || sy2 < r.y1 || sy1 > r.y2)) {
-          collide = true
+        if (!(bx + bw < r.x1 || bx > r.x2 || by + bh < r.y1 || by > r.y2)) {
+          labelCollide = true
           break
         }
       }
 
-      if (!collide) {
-        placed.push({ x1: sx1, y1: sy1, x2: sx2, y2: sy2 })
-        result.set(s.id, {
-          visible: true,
-          dx: offX,
-          dy: offY,
-          anchor: c.anchor
-        })
-        placedOk = true
-        break
+      if (!labelCollide) {
+        // 无标签碰撞——优先选择
+        if (lineCol === 0) {
+          bestCandidate = { c, bx, by }
+          bestCollisions = 0
+          break
+        }
+        if (lineCol < bestCollisions) {
+          bestCollisions = lineCol
+          bestCandidate = { c, bx, by }
+        }
+      } else if (forceShow) {
+        // 有标签碰撞——记录为回退选项
+        if (lineCol < fallbackCollisions) {
+          fallbackCollisions = lineCol
+          fallbackCandidate = { c, bx, by }
+        }
       }
     }
 
-    if (!placedOk) {
-      // 四个位置全部冲突：换乘/高亮站仍默认放右侧（强制显示），普通站隐藏
-      if (forceShow) {
-        const c = candidates[0]
-        const offX = c.offsetX(s)
-        const offY = c.offsetY(s)
-        result.set(s.id, {
-          visible: true,
-          dx: offX,
-          dy: offY,
-          anchor: c.anchor
-        })
-        // 仍记录占用，避免后面的继续堆这里
-        const tx_ = s.x + offX
-        const bx = tx_ - padX
-        const by = (s.y + offY) - charH - padY
-        placed.push({
-          x1: (bx + tx.value) * sc,
-          y1: (by + ty.value) * sc,
-          x2: (bx + tx.value) * sc + bw * sc,
-          y2: (by + ty.value) * sc + bh * sc
-        })
-      } else {
-        result.set(s.id, { visible: false })
-      }
+    if (bestCandidate) {
+      const { c, bx, by } = bestCandidate
+      placed.push({ x1: bx, y1: by, x2: bx + bw, y2: by + bh })
+      result.set(s.id, { visible: true, dx: c.offsetX, dy: c.offsetY, anchor: c.anchor })
+    } else if (fallbackCandidate) {
+      // 所有位置都有标签碰撞：使用线路碰撞最少的回退
+      const { c, bx, by } = fallbackCandidate
+      placed.push({ x1: bx, y1: by, x2: bx + bw, y2: by + bh })
+      result.set(s.id, { visible: true, dx: c.offsetX, dy: c.offsetY, anchor: c.anchor })
+    } else {
+      result.set(s.id, { visible: false })
     }
   }
 
@@ -518,10 +659,9 @@ function handleStationClick(clientX, clientY) {
   const list = stations.value
   let closest = null
   let closestDist = Infinity
-  const HIT_RADIUS = 14
+  const HIT_RADIUS = baseRadiusTransfer.value * 2
   for (const s of list) {
-    if (!s.co) continue
-    const d = Math.hypot(wx - s.co.x, wy - s.co.y)
+    const d = Math.hypot(wx - s.x, wy - s.y)
     if (d < HIT_RADIUS && d < closestDist) {
       closest = s
       closestDist = d
@@ -599,5 +739,21 @@ function zoomToStations(stationIds) {
   })
 }
 
-onMounted(() => { resetView() })
+onMounted(() => {
+  const svg = svgRef.value
+  if (svg) {
+    const updateRect = () => {
+      const rect = svg.getBoundingClientRect()
+      svgRect.value = { width: rect.width, height: rect.height }
+    }
+    updateRect()
+    resizeObserver = new ResizeObserver(updateRect)
+    resizeObserver.observe(svg)
+  }
+  resetView()
+})
+
+onBeforeUnmount(() => {
+  if (resizeObserver) resizeObserver.disconnect()
+})
 </script>
