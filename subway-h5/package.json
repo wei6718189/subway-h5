@@ -1,0 +1,27 @@
+{
+  "name": "subway-h5",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "深圳/广州/香港/南宁 地铁线路图 H5 (PWA) - 纯前端、离线可用、免备案部署",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "prepare:data": "node scripts/prepare-data/build_data.mjs",
+    "prepare:data:sz": "node scripts/prepare-data/build_data.mjs shenzhen",
+    "prepare:data:gz": "node scripts/prepare-data/build_data.mjs guangzhou",
+    "prepare:data:hk": "node scripts/prepare-data/build_data.mjs hongkong",
+    "prepare:data:nn": "node scripts/prepare-data/build_data.mjs nanning",
+    "icons": "node scripts/generate-icons.mjs"
+  },
+  "dependencies": {
+    "vue": "^3.4.21"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-vue": "^5.0.4",
+    "sharp": "^0.33.3",
+    "vite": "^5.2.8",
+    "vite-plugin-pwa": "^0.20.0"
+  }
+}
