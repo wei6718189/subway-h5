@@ -4,9 +4,9 @@
     <div class="route-summary">
       <span class="big">{{ formatMin(route.totalSec) }}</span>
       <span class="dim">约 {{ Math.round(route.totalSec / 60) }} 分钟</span>
-      <span class="dim">| {{ route.stationCount }} 站</span>
-      <span class="dim">| 换乘 {{ route.transferCount }} 次</span>
-      <button class="btn ghost" style="margin-left:auto;padding:5px 10px" @click="$emit('clear')">清除</button>
+      <span class="dim">· {{ route.stationCount }} 站</span>
+      <span class="dim">· 换乘 {{ route.transferCount }} 次</span>
+      <button class="btn ghost clear-btn" @click="$emit('clear')">清除</button>
     </div>
     <div class="leg-list">
       <template v-for="(leg, i) in route.legs" :key="i">
@@ -14,8 +14,8 @@
           <div class="bar" :style="{ background: lineColor(leg.lineId) }"></div>
           <div class="leg-body">
             <div class="leg-title">
-              <span class="line-badge" :style="{ background: lineColor(leg.lineId) }">{{ leg.lineId }}</span>
-              {{ lineName(leg.lineId) }}
+              <span class="line-badge" :style="{ background: lineColor(leg.lineId) }">{{ shortLineName(leg.lineId) }}</span>
+              {{ fullLineName(leg.lineId) }}
             </div>
             <div class="leg-stops">
               {{ stopName(leg.stops[0]) }} → {{ stopName(leg.stops[leg.stops.length - 1]) }}
@@ -24,7 +24,7 @@
           </div>
         </div>
         <div class="transfer-note" v-if="i < route.legs.length - 1">
-          在 {{ transferAt(leg, route.legs[i + 1]) }} 换乘 {{ route.legs[i + 1].lineId }}号线
+          在 {{ transferAt(leg, route.legs[i + 1]) }} 换乘 {{ shortLineName(route.legs[i + 1].lineId) }}
         </div>
       </template>
     </div>
@@ -44,6 +44,19 @@ function lineColor(lineId) {
 function lineName(lineId) {
   return props.cityData?.lines?.find(l => l.id === lineId)?.name || `${lineId}号线`
 }
+// 短名：提取 "X号线" 部分
+function shortLineName(lineId) {
+  const name = lineName(lineId)
+  const m = name.match(/(\d+[^线]*线)/)
+  if (m) return m[1]
+  // 对于 "6号线支线" 等，尝试匹配
+  const m2 = name.match(/(\d+号线)/)
+  if (m2) return m2[1]
+  return name.split('/')[0].trim()
+}
+function fullLineName(lineId) {
+  return lineName(lineId)
+}
 function stopName(id) {
   return props.cityData?.stations?.[id]?.name || id
 }
@@ -59,3 +72,11 @@ function formatMin(sec) {
   return `${Math.floor(m / 60)}小时${m % 60}分`
 }
 </script>
+
+<style scoped>
+.clear-btn {
+  margin-left: auto;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+</style>

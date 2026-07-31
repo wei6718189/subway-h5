@@ -15,6 +15,38 @@
       @select-station="onMapSelectStation"
     />
 
+    <!-- 站点选择弹窗：出现在站点上方/下方 -->
+    <Teleport to="body">
+      <div
+        v-if="popupStation"
+        class="station-popup"
+        :class="popupPlacement"
+        :style="popupPosStyle"
+        @click.stop
+      >
+        <div class="popup-title">{{ popupStation.name }}</div>
+        <div class="popup-lines">
+          <span
+            v-for="ln in popupStation.lines"
+            :key="ln"
+            class="line-badge"
+            :style="{ background: lineColor(ln) }"
+          >{{ shortLineName(ln) }}</span>
+        </div>
+        <div class="popup-actions">
+          <button class="btn start-btn" @click="setAsStart">设为起点</button>
+          <button class="btn end-btn" @click="setAsEnd">设为终点</button>
+          <button
+            v-if="isSelected(popupStationId)"
+            class="btn ghost cancel-btn"
+            @click="deselectStation"
+          >取消选择</button>
+        </div>
+        <!-- 小箭头：指向站点 -->
+        <div class="popup-arrow" :class="popupPlacement"></div>
+      </div>
+    </Teleport>
+
     <div class="bottom-panel">
       <StationSearch
         ref="searchRef"
@@ -22,8 +54,10 @@
         v-model:startId="startId"
         v-model:endId="endId"
         @plan="onPlan"
+        @clear="onClearRoute"
+        @select-station="onPopupSelect"
       />
-      <div style="margin-top:10px">
+      <div class="route-scroll-container">
         <RouteResult :route="route" :city-data="cityData" @clear="onClearRoute" />
       </div>
     </div>
@@ -31,7 +65,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef } from 'vue'
+import { ref, shallowRef, onMounted, onBeforeUnmount } from 'vue'
 import SubwayMap from './components/SubwayMap.vue'
 import StationSearch from './components/StationSearch.vue'
 import RouteResult from './components/RouteResult.vue'
@@ -49,6 +83,75 @@ const route = ref(null)
 const mapRef = ref(null)
 const searchRef = ref(null)
 
+// 弹窗状态
+const popupStationId = ref('')
+const popupPosStyle = ref({})
+const popupPlacement = ref('bottom') // 'top' or 'bottom'
+const popupStation = ref(null)
+
+function lineColor(lineId) {
+  return cityData.value?.lines?.find(l => l.id === lineId)?.color || '#666'
+}
+
+function shortLineName(lineId) {
+  const name = cityData.value?.lines?.find(l => l.id === lineId)?.name || `${lineId}号线`
+  const m = name.match(/(\d+[^线]*线)/)
+  if (m) return m[1]
+  const m2 = name.match(/(\d+号线)/)
+  if (m2) return m2[1]
+  return name.split('/')[0].trim()
+}
+
+function isSelected(id) {
+  return startId.value === id || endId.value === id
+}
+
+function closePopup() {
+  popupStationId.value = ''
+  popupStation.value = null
+}
+
+// 点击外部关闭弹窗
+function onGlobalClick(e) {
+  if (!popupStation.value) return
+  const popupEl = document.querySelector('.station-popup')
+  if (popupEl && popupEl.contains(e.target)) return
+  // 也不关闭如果点击的是地图上的站点 circle（会由 onMapSelectStation 处理）
+  if (e.target && e.target.closest && e.target.closest('svg.map circle')) return
+  closePopup()
+}
+
+onMounted(() => {
+  document.addEventListener('click', onGlobalClick, true)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('click', onGlobalClick, true)
+})
+
+function setAsStart() {
+  searchRef.value?.setStart(popupStationId.value)
+  closePopup()
+}
+
+function setAsEnd() {
+  searchRef.value?.setEnd(popupStationId.value)
+  closePopup()
+  if (startId.value && endId.value && startId.value !== endId.value) {
+    onPlan()
+  }
+}
+
+function deselectStation() {
+  if (startId.value === popupStationId.value) {
+    startId.value = ''
+  } else if (endId.value === popupStationId.value) {
+    endId.value = ''
+  }
+  route.value = null
+  closePopup()
+}
+
 async function onCityChange(cityId) {
   if (cityId === currentCity.value && cityData.value) return
   currentCity.value = cityId
@@ -56,6 +159,7 @@ async function onCityChange(cityId) {
   startId.value = ''
   endId.value = ''
   loading.value = true
+  closePopup()
   try {
     cityData.value = await loadCity(cityId)
   } catch (e) {
@@ -67,8 +171,64 @@ async function onCityChange(cityId) {
   }
 }
 
-function onMapSelectStation(id) {
-  searchRef.value?.setStationFromMap(id)
+function onMapSelectStation(id, screenX, screenY) {
+  const st = cityData.value?.stations?.[id]
+  if (!st) return
+
+  // 如果点击的是已选站点 → 取消选择
+  if (startId.value === id || endId.value === id) {
+    if (startId.value === id) startId.value = ''
+    else endId.value = ''
+    route.value = null
+    closePopup()
+    return
+  }
+
+  // 显示弹窗：出现在站点上方或下方
+  popupStationId.value = id
+  popupStation.value = st
+  const px = screenX != null ? screenX : window.innerWidth / 2
+  const py = screenY != null ? screenY : window.innerHeight / 2
+
+  const popupW = 180
+  const popupH = 190
+  const gap = 14  // 与站点的间距
+  const arrowH = 8
+
+  // 优先放在站点下方；如果下方空间不够，就放上方
+  const bottomSpace = window.innerHeight - py
+  const topSpace = py
+  let top, left
+  if (bottomSpace > popupH + gap + 60) {
+    // 放下方
+    popupPlacement.value = 'bottom'
+    top = py + gap + 10
+  } else if (topSpace > popupH + gap + 10) {
+    // 放上方
+    popupPlacement.value = 'top'
+    top = py - popupH - gap - 10
+  } else {
+    // 空间都不够，放到屏幕中
+    popupPlacement.value = 'bottom'
+    top = Math.min(py + gap, window.innerHeight - popupH - 20)
+  }
+
+  // 水平居中于站点，避免超出屏幕
+  left = px - popupW / 2
+  if (left < 10) left = 10
+  if (left + popupW > window.innerWidth - 10) left = window.innerWidth - popupW - 10
+
+  popupPosStyle.value = {
+    position: 'fixed',
+    left: left + 'px',
+    top: top + 'px',
+    width: popupW + 'px',
+    zIndex: 2000
+  }
+}
+
+function onPopupSelect(id) {
+  // StationSearch 内部处理搜索框选站
 }
 
 function onPlan() {
@@ -79,7 +239,6 @@ function onPlan() {
     return
   }
   route.value = result
-  // 缩放到路径范围
   const stationIds = []
   for (const leg of result.legs) stationIds.push(...leg.stops)
   mapRef.value?.zoomToStations(stationIds)
@@ -89,6 +248,98 @@ function onClearRoute() {
   route.value = null
 }
 
-// 初始化加载默认城市
 onCityChange('shenzhen')
 </script>
+
+<style>
+.station-popup {
+  background: rgba(25, 28, 33, 0.78);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 12px;
+  padding: 12px 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  animation: popIn 0.12s ease-out;
+}
+@keyframes popIn {
+  from { transform: scale(0.92); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.popup-arrow {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: rgba(25, 28, 33, 0.78);
+  border-left: 1px solid rgba(255, 255, 255, 0.18);
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  transform: rotate(45deg);
+  left: 50%;
+  margin-left: -7px;
+}
+.popup-arrow.bottom {
+  top: -8px;
+}
+.popup-arrow.top {
+  bottom: -8px;
+  transform: rotate(-135deg);
+  border-left: none;
+  border-top: none;
+  border-right: 1px solid rgba(255, 255, 255, 0.18);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+}
+.popup-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  margin: 0;
+}
+.popup-lines {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+.popup-lines .line-badge {
+  font-size: 10.5px;
+  padding: 1.5px 5px;
+  border-radius: 3px;
+  color: #fff;
+}
+.popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.popup-actions .btn {
+  width: 100%;
+  font-size: 12.5px;
+  padding: 6.5px 0;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+}
+.start-btn {
+  background: #4a9eff;
+  color: #fff;
+}
+.end-btn {
+  background: #ff8c42;
+  color: #fff;
+}
+.cancel-btn {
+  background: transparent;
+  color: #aaa;
+  font-size: 11.5px !important;
+  padding: 3px 0 !important;
+}
+.route-scroll-container {
+  overflow-y: auto;
+  max-height: calc(100vh - 300px);
+  -webkit-overflow-scrolling: touch;
+}
+</style>

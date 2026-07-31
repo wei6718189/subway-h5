@@ -88,10 +88,37 @@ svg.map {
 .bottom-panel {
   background: var(--panel);
   border-top: 1px solid var(--line);
-  padding: 10px 12px calc(var(--safe-bottom) + 12px);
-  flex-shrink: 0;
-  max-height: 46vh;
+  padding: 8px 10px calc(var(--safe-bottom) + 10px);
+  flex-shrink: 1;
+  display: flex;
+  flex-direction: column;
+  max-height: 55vh;
+  min-height: 160px;
+  overflow: hidden;
+}
+
+.bottom-panel > .route-scroll-container {
+  flex: 1;
   overflow-y: auto;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 搜索下拉框滚动：保证始终可以滚 */
+.datalist {
+  max-height: 260px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bottom-panel :deep(.datalist) {
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  z-index: 20;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+  margin-top: 4px;
 }
 
 .row {
@@ -184,12 +211,35 @@ svg.map {
   background: rgba(20,23,29,0.85);
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 4px 10px 8px;
   max-height: 60%;
-  overflow-y: auto;
   font-size: 11px;
   backdrop-filter: blur(6px);
   z-index: 5;
+  pointer-events: auto;
+  min-width: 140px;
+}
+.legend-toggle {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  user-select: none;
+}
+.legend-arrow {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.legend-body {
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+  margin-top: 2px;
 }
 .legend .lg-item {
   display: flex;
