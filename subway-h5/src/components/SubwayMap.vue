@@ -55,7 +55,7 @@
             <path
               :d="transferIconPath(s.x, s.y, svgRadius(s) * 0.6)"
               fill="none"
-              :stroke="s.highlight ? '#fff' : '#1a1d24'"
+              :stroke="(s.highlight && !s.isStart && !s.isEnd) ? '#1a1d24' : s.fill === '#fff' ? '#1a1d24' : '#fff'"
               :stroke-width="baseStrokeWidth * 0.5"
               stroke-linecap="round"
               stroke-linejoin="round"
@@ -81,7 +81,7 @@
             :text-anchor="labelData.get(s.id)?.anchor ?? 'start'"
             :font-size="baseFontSize"
             :font-weight="s.isTransfer || s.highlight ? 600 : 400"
-            :fill="s.highlight ? '#fff' : 'var(--text)'"
+            fill="#1a1d24"
             style="pointer-events: none"
           >{{ s.name }}</text>
         </g>
@@ -326,7 +326,8 @@ const snappedStationCoords = computed(() => {
   return snapped
 })
 
-// 每个站点ID的线路方向角度（0=水平, 90=垂直），用于标签垂直放置
+// 每个站点ID的线路方向角度（带符号的真实角度），用于标签旋转
+// 返回有向角度: -90~90，atan2(y,x)，正值表示线路向右下方倾斜
 const stationAngles = computed(() => {
   const angles = new Map()
   if (!props.cityData) return angles
@@ -345,7 +346,10 @@ const stationAngles = computed(() => {
       if (!vectors.length) continue
       let ax = 0, ay = 0
       for (const [vx, vy] of vectors) { ax += vx; ay += vy }
-      const angle = Math.atan2(Math.abs(ay), Math.abs(ax)) * 180 / Math.PI
+      // 带符号的真实角度，规范化到 (-90, 90] 区间
+      let angle = Math.atan2(ay, ax) * 180 / Math.PI
+      if (angle > 90) angle -= 180
+      if (angle <= -90) angle += 180
       if (!angles.has(id)) angles.set(id, [])
       angles.get(id).push(angle)
     }
@@ -385,10 +389,11 @@ const stations = computed(() => {
     const isEnd = dupIds.includes(props.endId)
     const onRoute = dupIds.some(did => highlightStationSet.value.has(did))
     const highlight = isStart || isEnd || onRoute
+    // 白色背景主题：所有站点文字为深色，起点/终点用彩色填充 + 深色描边
     let fill = '#fff'
     let stroke = '#1a1d24'
-    if (isStart) { fill = '#22c55e'; stroke = '#fff' }
-    else if (isEnd) { fill = '#ef4444'; stroke = '#fff' }
+    if (isStart) { fill = '#22c55e'; stroke = '#1a1d24' }
+    else if (isEnd) { fill = '#ef4444'; stroke = '#1a1d24' }
     else if (onRoute) { fill = '#fff'; stroke = '#4a9eff' }
     // 聚合同名站（换乘站）的所有吸附后坐标取平均，使圆圈落在线路交叉几何中心
     let avgX = co.x, avgY = co.y
@@ -400,16 +405,18 @@ const stations = computed(() => {
       }
       if (n > 1) { avgX = sx / n; avgY = sy / n }
     }
-    // 聚合同名站的所有线路方向角度
+    // 聚合同名站的所有线路方向角度（带符号，-90~90）
     const angleList = dupIds
       .map(did => stationAngles.value.get(did))
       .filter(a => a != null)
     const lineAngle = angleList.length
       ? angleList.reduce((a, b) => a + b, 0) / angleList.length
-      : 45
+      : 0
+    // 用于判断水平/垂直的绝对值角度（取绝对值供 getCandidates 使用）
+    const absLineAngle = Math.abs(lineAngle)
     return {
       id, name: st.name, x: avgX, y: avgY, fill, stroke, highlight,
-      isTransfer, lines, lineAngle
+      isTransfer, lines, lineAngle, absLineAngle
     }
   })
 })
@@ -454,11 +461,10 @@ function pointToSegDist(px, py, x1, y1, x2, y2) {
   return Math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
 }
 
-// 标签防重叠 5.0（线路方向感知 + 线路碰撞检测）：
-// 1) 按优先级排序：高亮站 > 换乘站 > 普通站
-// 2) 根据站点线路方向选择垂直方向放置（水平线→上下放, 垂直线→左右放）
-// 3) 检测标签与线路碰撞，避免文字压住线路
-// 4) 检测标签之间碰撞，避免文字重叠
+// 标签防重叠 7.0（纯水平文字 + 3 级距离 + 严格标签碰撞优先）：
+// 1) 按优先级排序：高亮站 > 换乘站 > 普通站，同优先级按字多的先排（大站优先占好位置）
+// 2) 3 级距离候选：近距(1×r) → 中距(1.8×r) → 远距(2.8×r)，每级 8 方向，共 24 个位置
+// 3) 评分：零标签碰撞 → 压线少 → 距离近；标签碰撞方案最后才用
 const labelData = computed(() => {
   const list = stations.value
   const result = new Map()
@@ -468,59 +474,63 @@ const labelData = computed(() => {
     const pa = a.highlight ? 0 : (a.isTransfer ? 1 : 2)
     const pb = b.highlight ? 0 : (b.isTransfer ? 1 : 2)
     if (pa !== pb) return pa - pb
+    // 同优先级，名字长的先排（大站名更难找到位置）
+    const la = (a.name || '').length
+    const lb = (b.name || '').length
+    if (lb !== la) return lb - la
     return (b.lines?.length || 0) - (a.lines?.length || 0)
   })
 
   const fs = baseFontSize.value
   const charW = fs
   const charH = fs * 1.2
-  const padX = fs * 0.15
-  const padY = fs * 0.1
-  const gap = fs * 1.0   // 文字与圆圈的间距：增大到字号的 100%，避免文字贴到线路
+  const padX = fs * 0.2
+  const padY = fs * 0.15
+  const gap = fs * 1.0
 
   const visR = (s) => svgRadius(s) + baseStrokeWidth.value
   const segs = lineSegments.value
 
-  // 根据线路方向返回候选位置顺序（8 标准 + 8 远距，共 16 个）
-  // 远距候选用于长站名（如4字站名）避开线路
+  // 根据线路方向返回 3 级 × 8 方向 = 24 个候选位置（按优先级排序）
+  // 近距：r=1×gap；中距：r=1.8×gap；远距：r=3.0×gap
   function getCandidates(s) {
-    const isHorizontal = s.lineAngle < 45
-    const r = visR(s) + gap
-    const diag = r * 0.707
-    const r2 = r * 1.8       // 远距偏移
-    const diag2 = r2 * 0.707 // 远距对角
+    const isHorizontal = (s.absLineAngle ?? 0) < 45
+    const baseR = visR(s) + gap
 
-    const mk = (anchor, ox, oy) => ({ anchor, offsetX: ox, offsetY: oy })
-    // 标准距离
-    const right = mk('start',  r,      charH * 0.35)
-    const left  = mk('end',   -r,      charH * 0.35)
-    const top   = mk('middle', 0,      -r)
-    const bot   = mk('middle', 0,       r + charH)
-    const tr = mk('start',  diag,  -diag)
-    const tl = mk('end',    -diag, -diag)
-    const br = mk('start',  diag,   diag + charH)
-    const bl = mk('end',   -diag,   diag + charH)
-    // 远距（为长站名提供更多空间）
-    const right2 = mk('start',  r2,      charH * 0.35)
-    const left2  = mk('end',   -r2,      charH * 0.35)
-    const top2   = mk('middle', 0,       -r2)
-    const bot2   = mk('middle', 0,       r2 + charH)
-    const tr2 = mk('start',  diag2,  -diag2)
-    const tl2 = mk('end',    -diag2, -diag2)
-    const br2 = mk('start',  diag2,   diag2 + charH)
-    const bl2 = mk('end',   -diag2,   diag2 + charH)
+    function make8(r) {
+      const diag = r * 0.707
+      const mk = (anchor, ox, oy) => ({ anchor, offsetX: ox, offsetY: oy, dist: r })
+      return [
+        mk('middle', 0,      -r),                   // top
+        mk('middle', 0,       r + charH),           // bot
+        mk('start',  diag,  -diag),                 // tr
+        mk('end',    -diag, -diag),                 // tl
+        mk('start',  diag,   diag + charH),         // br
+        mk('end',   -diag,   diag + charH),         // bl
+        mk('start',  r,      charH * 0.35),         // right
+        mk('end',   -r,      charH * 0.35),         // left
+      ]
+    }
 
-    // 水平线路→优先上下+对角，垂直线路→优先左右+对角，远距候选排在后面
-    return isHorizontal
-      ? [top, bot, tr, tl, br, bl, right, left, top2, bot2, tr2, tl2, br2, bl2, right2, left2]
-      : [right, left, tr, tl, br, bl, top, bot, right2, left2, tr2, tl2, br2, bl2, top2, bot2]
+    const near = make8(baseR)
+    const mid  = make8(baseR * 1.8)
+    const far  = make8(baseR * 3.0)
+
+    // 水平线：上下优先 → 对角 → 左右；垂直线：左右优先 → 对角 → 上下
+    function prioritize(arr) {
+      const [top, bot, tr, tl, br, bl, right, left] = arr
+      return isHorizontal
+        ? [top, bot, tr, tl, br, bl, right, left]
+        : [right, left, tr, tl, br, bl, top, bot]
+    }
+
+    return [...prioritize(near), ...prioritize(mid), ...prioritize(far)]
   }
 
   // 计算标签矩形压住的线路段数量（排除经过站点自身的线段）
-  // 标签矩形外扩 margin，让文字与线路保持安全距离
   function countLineCollisions(s, bx, by, bw, bh) {
     const skipDist = visR(s) + baseLineWidth.value
-    const m = fs * 0.8 // 安全间距：字号的 80%，确保文字不贴线路
+    const m = fs * 0.8
     let count = 0
     for (const seg of segs) {
       if (pointToSegDist(s.x, s.y, seg.x1, seg.y1, seg.x2, seg.y2) < skipDist) continue
@@ -529,6 +539,7 @@ const labelData = computed(() => {
     return count
   }
 
+  // placed 存储 AABB：{x1,y1,x2,y2}
   const placed = []
 
   for (const s of sorted) {
@@ -538,18 +549,17 @@ const labelData = computed(() => {
     const bw = nameLen * charW + padX * 2
     const bh = charH + padY * 2
 
-    const forceShow = s.highlight || s.isTransfer
     const candidates = getCandidates(s)
 
-    // 评分制：遍历所有候选位置
-    // 1. 零标签碰撞 + 零线路碰撞 → 直接使用
-    // 2. 零标签碰撞 + 压线 ≤1 → 可接受（含普通站）
-    // 3. 零标签碰撞 + 压线 ≤3 → 普通站回退（避免长站名完全消失）
-    // 4. 有标签碰撞 + 压线最少 → 最后回退（所有站都可，避免完全消失）
-    let bestCandidate = null
-    let fallback1 = null   // 零标签碰撞 + 压线 ≤1
-    let fallback2 = null   // 零标签碰撞 + 压线 ≤3
-    let lastFallback = null // 有标签碰撞，压线最少（最后回退）
+    // 四档回退策略：
+    // best: 零标签碰撞 + 零线路碰撞
+    // fb1:  零标签碰撞 + 线路碰撞 ≤1
+    // fb2:  零标签碰撞 + 线路碰撞 ≤3
+    // fb3:  零标签碰撞（任意压线，至少不跟别的标签重叠）
+    // lastFb: 允许标签碰撞，选压线最少、距离最近的
+    let best = null
+    let fb1 = null, fb2 = null, fb3 = null
+    let lastFb = null
 
     for (const c of candidates) {
       const tx_ = s.x + c.offsetX
@@ -561,50 +571,33 @@ const labelData = computed(() => {
       else bx = tx_ - bw / 2
       const by = ty_ - charH - padY
 
-      // 检测标签之间的碰撞
+      // 标签碰撞检测（严格：任何重叠都不允许）
       let labelCollide = false
       for (const r of placed) {
-        if (!(bx + bw < r.x1 || bx > r.x2 || by + bh < r.y1 || by > r.y2)) {
+        if (!(bx + bw <= r.x1 || bx >= r.x2 || by + bh <= r.y1 || by >= r.y2)) {
           labelCollide = true
           break
         }
       }
 
       const lineCol = countLineCollisions(s, bx, by, bw, bh)
+      // 评分：压线优先，相同压线则距离近的优先
+      const score = (cand) => cand.col * 1000 + cand.dist
 
       if (!labelCollide) {
-        if (lineCol === 0) {
-          bestCandidate = { c, bx, by }
-          break
-        }
-        if (lineCol <= 1 && (!fallback1 || lineCol < fallback1.col)) {
-          fallback1 = { c, bx, by, col: lineCol }
-        }
-        if (lineCol <= 3 && (!fallback2 || lineCol < fallback2.col)) {
-          fallback2 = { c, bx, by, col: lineCol }
-        }
+        if (lineCol === 0) { best = { c, bx, by, col: 0, dist: c.dist }; break }
+        if (lineCol <= 1 && (!fb1 || lineCol < fb1.col || (lineCol === fb1.col && c.dist < fb1.dist))) fb1 = { c, bx, by, col: lineCol, dist: c.dist }
+        if (lineCol <= 3 && (!fb2 || lineCol < fb2.col || (lineCol === fb2.col && c.dist < fb2.dist))) fb2 = { c, bx, by, col: lineCol, dist: c.dist }
+        if (!fb3 || lineCol < fb3.col || (lineCol === fb3.col && c.dist < fb3.dist)) fb3 = { c, bx, by, col: lineCol, dist: c.dist }
       }
-      // 所有候选都记录压线最少（含标签碰撞），作为最后回退
-      if (!lastFallback || lineCol < lastFallback.col) {
-        lastFallback = { c, bx, by, col: lineCol }
+      if (!lastFb || lineCol < lastFb.col || (lineCol === lastFb.col && c.dist < lastFb.dist)) {
+        lastFb = { c, bx, by, col: lineCol, dist: c.dist }
       }
     }
 
-    if (bestCandidate) {
-      const { c, bx, by } = bestCandidate
-      placed.push({ x1: bx, y1: by, x2: bx + bw, y2: by + bh })
-      result.set(s.id, { visible: true, dx: c.offsetX, dy: c.offsetY, anchor: c.anchor })
-    } else if (fallback1) {
-      const { c, bx, by } = fallback1
-      placed.push({ x1: bx, y1: by, x2: bx + bw, y2: by + bh })
-      result.set(s.id, { visible: true, dx: c.offsetX, dy: c.offsetY, anchor: c.anchor })
-    } else if (fallback2) {
-      const { c, bx, by } = fallback2
-      placed.push({ x1: bx, y1: by, x2: bx + bw, y2: by + bh })
-      result.set(s.id, { visible: true, dx: c.offsetX, dy: c.offsetY, anchor: c.anchor })
-    } else if (lastFallback) {
-      // 最后回退：所有位置都有标签碰撞，选压线最少的（确保所有站点都能显示）
-      const { c, bx, by } = lastFallback
+    const chosen = best || fb1 || fb2 || fb3 || lastFb
+    if (chosen) {
+      const { c, bx, by } = chosen
       placed.push({ x1: bx, y1: by, x2: bx + bw, y2: by + bh })
       result.set(s.id, { visible: true, dx: c.offsetX, dy: c.offsetY, anchor: c.anchor })
     } else {

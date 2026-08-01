@@ -1,11 +1,11 @@
 :root {
-  --bg: #0f1115;
-  --panel: #1a1d24;
-  --panel-2: #22262f;
-  --text: #e8eaed;
-  --text-dim: #9aa0a6;
+  --bg: #ffffff;
+  --panel: #f5f6f8;
+  --panel-2: #ffffff;
+  --text: #1a1d24;
+  --text-dim: #5f6368;
   --accent: #4a9eff;
-  --line: #2a2f3a;
+  --line: #e0e3e8;
   --radius: 10px;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -75,7 +75,7 @@ input {
   flex: 1;
   position: relative;
   overflow: hidden;
-  background: #14171d;
+  background: #ffffff;
 }
 
 svg.map {
@@ -189,7 +189,7 @@ svg.map {
   gap: 8px;
 }
 .datalist .item:last-child { border-bottom: none; }
-.datalist .item:active { background: #2a2f3a; }
+.datalist .item:active { background: #eef0f3; }
 
 .line-badge {
   display: inline-flex;
@@ -208,7 +208,7 @@ svg.map {
   position: absolute;
   top: 8px;
   right: 8px;
-  background: rgba(20,23,29,0.85);
+  background: rgba(255,255,255,0.9);
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 4px 10px 8px;
@@ -303,7 +303,7 @@ svg.map {
   align-items: center;
   justify-content: center;
   color: var(--text-dim);
-  background: rgba(15,17,21,0.6);
+  background: rgba(255,255,255,0.6);
   z-index: 8;
 }
 
@@ -320,7 +320,7 @@ svg.map {
   width: 38px;
   height: 38px;
   border-radius: 8px;
-  background: rgba(20,23,29,0.85);
+  background: rgba(255,255,255,0.9);
   border: 1px solid var(--line);
   color: var(--text);
   font-size: 20px;
