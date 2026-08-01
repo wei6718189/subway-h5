@@ -240,29 +240,33 @@ defineExpose({ setStationFromMap, setStart, setEnd, reset, onClear })
   flex: 1 1 0;
   min-width: 0;
   max-width: 100%;
-  padding: 6px 8px;
-  font-size: 12px;
-  height: 30px;
+  padding: 8px 10px;
+  /* iOS: font-size 必须 ≥16px 才能避免 focus 时浏览器自动放大页面 */
+  font-size: 16px;
+  height: 40px;
+  line-height: 24px;
   box-sizing: border-box;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 .swap-btn {
-  width: 26px;
-  height: 30px;
+  width: 34px;
+  height: 40px;
   flex-shrink: 0;
   padding: 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 .plan-btn {
   flex-shrink: 0;
-  padding: 6px 10px;
-  font-size: 12px;
-  height: 30px;
+  padding: 8px 14px;
+  font-size: 14px;
+  height: 40px;
 }
 .clear-btn {
   flex-shrink: 0;
-  padding: 6px 8px;
-  font-size: 12px;
-  height: 30px;
+  padding: 8px 10px;
+  font-size: 14px;
+  height: 40px;
 }
 /* 下拉框：绝对定位在搜索行正下方，类似原生下拉 */
 .datalist {

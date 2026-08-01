@@ -34,6 +34,9 @@ body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   user-select: none;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
 }
 
 button {
@@ -68,7 +71,7 @@ input {
   right: 0;
   width: 100%;
   z-index: 30;
-  overflow: hidden;
+  overflow: visible;
   min-width: 0;
 }
 
@@ -86,7 +89,7 @@ input {
   background: #ffffff;
   /* 顶栏/底栏已钉住，中间地图区域留出对应安全距离，不会被遮挡 */
   padding-top: calc(var(--safe-top) + 52px);
-  padding-bottom: calc(var(--safe-bottom) + 180px);
+  padding-bottom: calc(var(--safe-bottom) + 200px);
 }
 
 svg.map {
@@ -99,7 +102,7 @@ svg.map {
 .bottom-panel {
   background: var(--panel);
   border-top: 1px solid var(--line);
-  padding: 8px 10px calc(var(--safe-bottom) + 10px);
+  padding: 10px 10px calc(var(--safe-bottom) + 10px);
   position: fixed;
   bottom: 0;
   left: 0;
@@ -109,7 +112,7 @@ svg.map {
   display: flex;
   flex-direction: column;
   max-height: 55vh;
-  min-height: 160px;
+  min-height: 180px;
   overflow: visible;
   min-width: 0;
 }
@@ -340,8 +343,8 @@ svg.map {
 .zoom-ctrl {
   position: fixed;
   right: 10px;
-  /* 固定在底栏上方不被挡住：底栏 min 160px + 安全区 + 10px 间隔 */
-  bottom: calc(var(--safe-bottom) + 180px);
+  /* 固定在底栏上方不被挡住：底栏 min 180px + 安全区 + 10px 间隔 */
+  bottom: calc(var(--safe-bottom) + 200px);
   display: flex;
   flex-direction: column;
   gap: 6px;

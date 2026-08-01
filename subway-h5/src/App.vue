@@ -305,13 +305,13 @@ onCityChange('shenzhen')
 
 <style>
 .station-popup {
-  background: rgba(25, 28, 33, 0.78);
+  background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 12px;
   padding: 12px 14px;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.55);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
   display: flex;
   flex-direction: column;
   gap: 9px;
@@ -325,9 +325,9 @@ onCityChange('shenzhen')
   position: absolute;
   width: 14px;
   height: 14px;
-  background: rgba(25, 28, 33, 0.78);
-  border-left: 1px solid rgba(255, 255, 255, 0.18);
-  border-top: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.72);
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
   transform: rotate(45deg);
   left: 50%;
   margin-left: -7px;
@@ -340,13 +340,13 @@ onCityChange('shenzhen')
   transform: rotate(-135deg);
   border-left: none;
   border-top: none;
-  border-right: 1px solid rgba(255, 255, 255, 0.18);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 .popup-title {
   font-size: 15px;
   font-weight: 600;
-  color: #fff;
+  color: #1a1d24;
   text-align: center;
   margin: 0;
 }
