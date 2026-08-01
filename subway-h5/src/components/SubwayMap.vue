@@ -792,13 +792,17 @@ function zoomBy(factor) {
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
 
-// 默认缩放：1.5 让地铁图初始显示更大一些，便于查看站点
-const DEFAULT_SCALE = 1.5
+// 默认缩放：4 让地铁图初始显示更大一些，便于查看站点
+const DEFAULT_SCALE = 4
 
 function resetView() {
+  const W = proj.value.width || 1000
+  const H = proj.value.height || 800
   scale.value = DEFAULT_SCALE
-  tx.value = 0
-  ty.value = 0
+  // 以 viewBox 中心为基准缩放，保证地铁图默认居中显示
+  // 推导：让 g 变换后中心点 (W/2, H/2) 仍位于容器中心
+  tx.value = (W / 2) * (1 - DEFAULT_SCALE)
+  ty.value = (H / 2) * (1 - DEFAULT_SCALE)
 }
 
 watch(() => props.cityData, () => {
