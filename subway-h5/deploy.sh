@@ -39,60 +39,84 @@ if [ ! -d "dist" ]; then
     npm run build
 fi
 
-# 3. 配置 coscli（覆盖旧配置）
+# 3. 配置 coscli（直接写 YAML，完全非交互）
 echo "📝 配置 coscli..."
 export PATH="$HOME/bin:$PATH"
 
-# 如果有旧配置，先备份
 if [ -f "$COS_CONFIG" ]; then
     cp "$COS_CONFIG" "${COS_CONFIG}.bak"
 fi
 
-# 用 config add 非交互式配置
-coscli config add \
-    -b "$FULL_BUCKET" \
-    -e "$ENDPOINT" \
-    -a "$BUCKET_NAME" \
-    -r "$REGION" \
-    -i "$SECRET_ID" \
-    -k "$SECRET_KEY" \
-    -p https
+cat > "$COS_CONFIG" << EOF
+cos:
+  base:
+    secretid: $SECRET_ID
+    secretkey: $SECRET_KEY
+    sessiontoken: ""
+    protocol: https
+  buckets:
+  - name: $FULL_BUCKET
+    alias: $BUCKET_NAME
+    region: $REGION
+    endpoint: $ENDPOINT
+    ofs: false
+EOF
 
+coscli config show > /dev/null 2>&1 || {
+    echo "❌ 配置验证失败，检查密钥是否正确"
+    exit 1
+}
 echo "✅ 配置完成"
 
-# 4. 上传文件
+# 4. 上传文件（先整体上传，再单独修复 MIME）
 echo ""
 echo "📤 上传 dist/ 到 COS..."
 coscli cp dist/ cos://${BUCKET_NAME}/ -r
 echo "✅ 上传完成"
 
-# 5. 配置静态网站托管
+# 5. 修复所有文件的 MIME + Content-Disposition + Cache-Control
+#    COS 默认会设置 Content-Disposition: attachment，导致浏览器下载
+#    必须重新上传每个关键文件，指定正确的 MIME 和 inline 显示
 echo ""
-echo "🌐 开启静态网站托管..."
-coscli website set --bucket "$BUCKET_NAME" \
-    --index-document index.html \
-    --error-document index.html
-echo "✅ 静态网站已开启"
+echo "🔧 设置 MIME + Content-Disposition + Cache-Control..."
 
-# 6. 设置缓存
-echo ""
-echo "⚙️  设置缓存策略..."
-coscli cache set --bucket "$BUCKET_NAME" --rule "rule_html" \
-    --time 300 --type file --value "index.html"
-coscli cache set --bucket "$BUCKET_NAME" --rule "rule_assets" \
-    --time 31536000 --type prefix --value "assets/"
-coscli cache set --bucket "$BUCKET_NAME" --rule "rule_data" \
-    --time 3600 --type prefix --value "data/"
+# HTML: 5分钟缓存
+coscli cp dist/index.html cos://${BUCKET_NAME}/index.html \
+    --meta "Content-Type:text/html#Content-Disposition:inline#Cache-Control:max-age=300" 2>&1 | tail -1
+
+# JS/CSS (assets/): 1年缓存（带 hash，immutable）
+for jsfile in dist/assets/*.js; do
+    name=$(basename "$jsfile")
+    coscli cp "$jsfile" "cos://${BUCKET_NAME}/assets/$name" \
+        --meta "Content-Type:application/javascript#Content-Disposition:inline#Cache-Control:max-age=31536000,immutable" 2>&1 | tail -1
+done
+
+for cssfile in dist/assets/*.css; do
+    name=$(basename "$cssfile")
+    coscli cp "$cssfile" "cos://${BUCKET_NAME}/assets/$name" \
+        --meta "Content-Type:text/css#Content-Disposition:inline#Cache-Control:max-age=31536000,immutable" 2>&1 | tail -1
+done
+
+# 图标: 7天缓存
+for icon in dist/icons/*; do
+    name=$(basename "$icon")
+    coscli cp "$icon" "cos://${BUCKET_NAME}/icons/$name" \
+        --meta "Content-Type:image/png#Content-Disposition:inline#Cache-Control:max-age=604800" 2>&1 | tail -1
+done
+
+# 数据 JSON: 1小时缓存
+for data in dist/data/*; do
+    name=$(basename "$data")
+    coscli cp "$data" "cos://${BUCKET_NAME}/data/$name" \
+        --meta "Content-Type:application/json#Content-Disposition:inline#Cache-Control:max-age=3600" 2>&1 | tail -1
+done
+
 echo "✅ 缓存策略已设置"
 
-# 7. 设置 MIME
+# 6. 验证
 echo ""
-echo "🔧  设置 MIME 类型..."
-coscli mime set --bucket "$BUCKET_NAME" \
-    --mime ".json=application/json" \
-    --mime ".webmanifest=application/manifest+json" \
-    --mime ".svg=image/svg+xml"
-echo "✅ MIME 已设置"
+echo "🔍 验证响应头..."
+curl -s -I "https://${FULL_BUCKET}.cos-website.${REGION}.myqcloud.com/" 2>&1 | grep -E "Content-Type|Content-Disposition"
 
 # 完成
 echo ""
@@ -101,12 +125,13 @@ echo " ✅ 部署完成！"
 echo "========================================="
 echo ""
 echo " 🌐 访问地址:"
-echo "   https://${FULL_BUCKET}.${ENDPOINT}"
+echo "   https://${FULL_BUCKET}.cos-website.${REGION}.myqcloud.com"
 echo ""
-echo " 📱 手机测试:"
-echo "   在手机浏览器打开上面的地址"
+echo " 💡 如果页面还是下载，请在控制台检查:"
+echo "   → 权限管理 → 存储桶访问权限 → 公有读私有写"
+echo "   → 基础配置 → 静态网站 → 开启"
+echo "   → 强制 HTTPS → 开启"
 echo ""
-echo " ⚠️  重要提醒:"
-echo "   请立即到 https://console.cloud.tencent.com/cam/capi"
-echo "   删除旧密钥，重新创建一对新密钥！"
+echo " ⚠️  部署完成后请立即删除旧密钥！"
+echo "   https://console.cloud.tencent.com/cam/capi"
 echo ""
