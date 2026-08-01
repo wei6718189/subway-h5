@@ -40,7 +40,7 @@
         />
         <!-- 站点 -->
         <g v-for="s in stations" :key="'s-' + s.id">
-          <!-- 换乘站：白底大圆 + 描边 + 内部双向箭头 -->
+          <!-- 换乘站：白底圆 + 细描边 + 内部双向箭头 -->
           <template v-if="s.isTransfer">
             <circle
               :cx="s.x"
@@ -48,15 +48,15 @@
               :r="svgRadius(s)"
               :fill="s.highlight ? s.fill : '#fff'"
               :stroke="s.highlight ? s.stroke : '#1a1d24'"
-              :stroke-width="baseStrokeWidth"
+              :stroke-width="baseStrokeWidth * 0.5"
               @click.stop="$emit('select-station', s.id)"
               style="cursor: pointer"
             />
             <path
-              :d="transferIconPath(s.x, s.y, svgRadius(s) * 0.7)"
+              :d="transferIconPath(s.x, s.y, svgRadius(s) * 0.6)"
               fill="none"
               :stroke="s.highlight ? '#fff' : '#1a1d24'"
-              :stroke-width="baseStrokeWidth * 0.8"
+              :stroke-width="baseStrokeWidth * 0.5"
               stroke-linecap="round"
               stroke-linejoin="round"
               pointer-events="none"
@@ -70,7 +70,7 @@
             :r="svgRadius(s)"
             :fill="s.fill"
             :stroke="s.stroke"
-            :stroke-width="baseStrokeWidth"
+            :stroke-width="baseStrokeWidth*0.5"
             @click.stop="$emit('select-station', s.id)"
             style="cursor: pointer"
           />
