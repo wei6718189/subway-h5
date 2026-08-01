@@ -253,7 +253,7 @@ const highlightPolys = computed(() => {
   return segs
 })
 
-// 所有线路段（用于标签与线路碰撞检测）
+// 所有线路段（用于标签与线路碰撞检测 + 站点吸附）
 const lineSegments = computed(() => {
   if (!props.cityData) return []
   const p = proj.value
@@ -271,6 +271,59 @@ const lineSegments = computed(() => {
     }
   }
   return segs
+})
+
+// 点到线段的最近点（用于站点吸附到线路中心线上）
+function closestPointOnSeg(px, py, x1, y1, x2, y2) {
+  const dx = x2 - x1, dy = y2 - y1
+  if (dx === 0 && dy === 0) return { x: x1, y: y1 }
+  let t = ((px - x1) * dx + (py - y1) * dy)
+  t /= dx * dx + dy * dy
+  t = Math.max(0, Math.min(1, t))
+  return { x: x1 + t * dx, y: y1 + t * dy }
+}
+
+// 站点坐标吸附到线路中心线上：每个站点只在自己所属线路的线段中找最近点
+// 解决：线路使用自定义 path 但站点用自身 x,y，导致圆圈不居中在线路上
+const snappedStationCoords = computed(() => {
+  const orig = stationCoords.value
+  if (!props.cityData) return orig
+  const p = proj.value
+
+  // 构建 stationId -> 该站所属线路的所有线段数组
+  const segsByStation = new Map()
+  for (const line of props.cityData.lines || []) {
+    // 解析该线路的所有线段点（与 linePolys 渲染逻辑一致：path 优先）
+    let pts = []
+    if (line.path && line.path.length > 0) {
+      pts = line.path.map(([x, y]) => p.projectXY(x, y))
+    } else {
+      pts = (line.stationIds || []).map(id => orig[id]).filter(Boolean)
+    }
+    // 该线路的所有站点
+    for (const sid of line.stationIds || []) {
+      if (!segsByStation.has(sid)) segsByStation.set(sid, [])
+      const arr = segsByStation.get(sid)
+      for (let i = 1; i < pts.length; i++) {
+        arr.push({ x1: pts[i - 1].x, y1: pts[i - 1].y, x2: pts[i].x, y2: pts[i].y })
+      }
+    }
+  }
+
+  const snapped = {}
+  for (const [id, co] of Object.entries(orig)) {
+    const segs = segsByStation.get(id)
+    // 该站没有线路信息 -> 跳过吸附，使用原坐标
+    if (!segs || !segs.length) { snapped[id] = { x: co.x, y: co.y }; continue }
+    let bestX = co.x, bestY = co.y, bestD = Infinity
+    for (const seg of segs) {
+      const q = closestPointOnSeg(co.x, co.y, seg.x1, seg.y1, seg.x2, seg.y2)
+      const d = (q.x - co.x) ** 2 + (q.y - co.y) ** 2
+      if (d < bestD) { bestD = d; bestX = q.x; bestY = q.y }
+    }
+    snapped[id] = { x: bestX, y: bestY }
+  }
+  return snapped
 })
 
 // 每个站点ID的线路方向角度（0=水平, 90=垂直），用于标签垂直放置
@@ -313,8 +366,9 @@ function toggleLegend() {
 
 const stations = computed(() => {
   if (!props.cityData) return []
-  const c = stationCoords.value
-  // 按站名去重：同名站（换乘站跨线）只渲染一次，坐标取第一个有效坐标
+  // 使用吸附后的坐标（每个站点都投影到了最近线路段上）
+  const c = snappedStationCoords.value
+  // 按站名去重：同名站（换乘站跨线）只渲染一次
   const byName = new Map()
   for (const [id, st] of Object.entries(props.cityData.stations || {})) {
     const co = c[id]
@@ -336,7 +390,17 @@ const stations = computed(() => {
     if (isStart) { fill = '#22c55e'; stroke = '#fff' }
     else if (isEnd) { fill = '#ef4444'; stroke = '#fff' }
     else if (onRoute) { fill = '#fff'; stroke = '#4a9eff' }
-    // 聚合同名站（换乘站）的所有线路方向角度
+    // 聚合同名站（换乘站）的所有吸附后坐标取平均，使圆圈落在线路交叉几何中心
+    let avgX = co.x, avgY = co.y
+    if (dupIds.length > 1) {
+      let sx = 0, sy = 0, n = 0
+      for (const did of dupIds) {
+        const dc = c[did]
+        if (dc) { sx += dc.x; sy += dc.y; n++ }
+      }
+      if (n > 1) { avgX = sx / n; avgY = sy / n }
+    }
+    // 聚合同名站的所有线路方向角度
     const angleList = dupIds
       .map(did => stationAngles.value.get(did))
       .filter(a => a != null)
@@ -344,7 +408,7 @@ const stations = computed(() => {
       ? angleList.reduce((a, b) => a + b, 0) / angleList.length
       : 45
     return {
-      id, name: st.name, x: co.x, y: co.y, fill, stroke, highlight,
+      id, name: st.name, x: avgX, y: avgY, fill, stroke, highlight,
       isTransfer, lines, lineAngle
     }
   })
@@ -412,7 +476,7 @@ const labelData = computed(() => {
   const charH = fs * 1.2
   const padX = fs * 0.15
   const padY = fs * 0.1
-  const gap = fs * 0.25
+  const gap = fs * 1.0   // 文字与圆圈的间距：增大到字号的 100%，避免文字贴到线路
 
   const visR = (s) => svgRadius(s) + baseStrokeWidth.value
   const segs = lineSegments.value
@@ -456,7 +520,7 @@ const labelData = computed(() => {
   // 标签矩形外扩 margin，让文字与线路保持安全距离
   function countLineCollisions(s, bx, by, bw, bh) {
     const skipDist = visR(s) + baseLineWidth.value
-    const m = fs * 0.2 // 安全间距：字号的 20%
+    const m = fs * 0.8 // 安全间距：字号的 80%，确保文字不贴线路
     let count = 0
     for (const seg of segs) {
       if (pointToSegDist(s.x, s.y, seg.x1, seg.y1, seg.x2, seg.y2) < skipDist) continue
