@@ -6,7 +6,6 @@
       <span class="dim">约 {{ Math.round(route.totalSec / 60) }} 分钟</span>
       <span class="dim">· {{ route.stationCount }} 站</span>
       <span class="dim">· 换乘 {{ route.transferCount }} 次</span>
-      <button class="btn ghost clear-btn" @click="$emit('clear')">清除</button>
     </div>
     <div class="leg-list">
       <template v-for="(leg, i) in route.legs" :key="i">
@@ -74,9 +73,4 @@ function formatMin(sec) {
 </script>
 
 <style scoped>
-.clear-btn {
-  margin-left: auto;
-  padding: 4px 10px;
-  font-size: 12px;
-}
 </style>

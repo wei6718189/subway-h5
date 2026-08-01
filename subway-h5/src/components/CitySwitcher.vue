@@ -1,13 +1,11 @@
 <template>
-  <div class="chips">
-    <button
-      v-for="c in cities"
-      :key="c.id"
-      class="chip"
-      :class="{ active: c.id === current }"
-      @click="$emit('update:current', c.id)"
-    >{{ c.name }}</button>
-  </div>
+  <select
+    class="city-select"
+    :value="current"
+    @change="$emit('update:current', $event.target.value)"
+  >
+    <option v-for="c in cities" :key="c.id" :value="c.id">{{ c.name }}</option>
+  </select>
 </template>
 
 <script setup>

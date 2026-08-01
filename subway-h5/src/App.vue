@@ -3,6 +3,25 @@
     <div class="topbar">
       <h1>地铁线路图</h1>
       <CitySwitcher :current="currentCity" @update:current="onCityChange" />
+      <!-- 线路图例 -->
+      <div class="legend" v-if="cityData" ref="legendRef">
+        <div class="legend-toggle" @click.stop="toggleLegend">
+          <span>线路图例</span>
+          <span class="legend-arrow">{{ legendOpen ? '▼' : '▶' }}</span>
+        </div>
+        <div class="legend-body" v-if="legendOpen">
+          <div
+            class="lg-item"
+            v-for="line in cityData.lines"
+            :key="'lg-' + line.id"
+            :class="{ active: highlightLineId === line.id }"
+            @click.stop="onLegendClickLine(line.id)"
+          >
+            <span class="lg-swatch" :style="{ background: line.color }"></span>
+            <span>{{ line.name }}</span>
+          </div>
+        </div>
+      </div>
     </div>
 
     <SubwayMap
@@ -12,6 +31,7 @@
       :start-id="startId"
       :end-id="endId"
       :loading="loading"
+      :highlight-line-id="highlightLineId"
       @select-station="onMapSelectStation"
     />
 
@@ -83,6 +103,36 @@ const route = ref(null)
 const mapRef = ref(null)
 const searchRef = ref(null)
 
+// 图例状态
+const legendRef = ref(null)
+const legendOpen = ref(false)
+const highlightLineId = ref('')
+
+function toggleLegend() {
+  legendOpen.value = !legendOpen.value
+}
+
+function onLegendClickLine(lineId) {
+  if (highlightLineId.value === lineId) {
+    highlightLineId.value = ''
+  } else {
+    highlightLineId.value = lineId
+  }
+}
+
+// 点击图例下拉框以外：
+// 1) 下拉框打开时 → 仅收起，保留高亮
+// 2) 下拉框已收起且有高亮 → 清除高亮
+function onDocClickLegend(e) {
+  if (!legendRef.value) return
+  if (legendRef.value.contains(e.target)) return
+  if (legendOpen.value) {
+    legendOpen.value = false
+  } else if (highlightLineId.value) {
+    highlightLineId.value = ''
+  }
+}
+
 // 弹窗状态
 const popupStationId = ref('')
 const popupPosStyle = ref({})
@@ -123,10 +173,12 @@ function onGlobalClick(e) {
 
 onMounted(() => {
   document.addEventListener('click', onGlobalClick, true)
+  document.addEventListener('click', onDocClickLegend, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onGlobalClick, true)
+  document.removeEventListener('click', onDocClickLegend, true)
 })
 
 function setAsStart() {

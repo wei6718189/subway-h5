@@ -19,14 +19,14 @@
           :key="'l-' + line.id"
           :points="line.points"
           :stroke="line.color"
-          :stroke-width="baseLineWidth"
+          :stroke-width="(highlightLineId && highlightLineId === line.id) ? baseLineWidthHL : baseLineWidth"
           stroke-linejoin="round"
           stroke-linecap="round"
           fill="none"
-          :opacity="dimmed ? 0.25 : 1"
-          style="transition: opacity 0.2s"
+          :opacity="lineOpacity(line.id)"
+          style="transition: opacity 0.2s, stroke-width 0.2s"
         />
-        <!-- 高亮路径段 -->
+        <!-- 高亮路径段（规划结果线路，优先级最高） -->
         <polyline
           v-for="(seg, i) in highlightPolys"
           :key="'h-' + i"
@@ -36,10 +36,10 @@
           stroke-linejoin="round"
           stroke-linecap="round"
           fill="none"
-          opacity="0.95"
+          :opacity="routeSegOpacity(seg.lineId)"
         />
         <!-- 站点 -->
-        <g v-for="s in stations" :key="'s-' + s.id">
+        <g v-for="s in stations" :key="'s-' + s.id" :opacity="stationOpacity(s)" style="transition: opacity 0.2s">
           <!-- 换乘站：白底圆 + 细描边 + 内部双向箭头 -->
           <template v-if="s.isTransfer">
             <circle
@@ -88,19 +88,6 @@
       </g>
     </svg>
 
-    <div class="legend" v-if="cityData">
-      <div class="legend-toggle" @click="toggleLegend">
-        <span>线路图例</span>
-        <span class="legend-arrow">{{ legendOpen ? '▼' : '▶' }}</span>
-      </div>
-      <div class="legend-body" v-if="legendOpen">
-        <div class="lg-item" v-for="line in cityData.lines" :key="'lg-' + line.id">
-          <span class="lg-swatch" :style="{ background: line.color }"></span>
-          <span>{{ line.name }}</span>
-        </div>
-      </div>
-    </div>
-
     <div class="zoom-ctrl">
       <button @click="zoomBy(1.25)">+</button>
       <button @click="zoomBy(0.8)">−</button>
@@ -119,7 +106,8 @@ const props = defineProps({
   highlight: { type: Array, default: () => [] }, // legs: [{lineId, stops:[id...]}]
   startId: { type: String, default: '' },
   endId: { type: String, default: '' },
-  loading: { type: Boolean, default: false }
+  loading: { type: Boolean, default: false },
+  highlightLineId: { type: String, default: '' }
 })
 
 const emit = defineEmits(['select-station'])
@@ -136,7 +124,35 @@ const proj = computed(() => {
   return makeProjection(bounds, 1000)
 })
 
-const dimmed = computed(() => props.highlight && props.highlight.length > 0)
+// 规划结果高亮（起终点连线）的淡化，只在存在规划结果时触发
+const routeDimmed = computed(() => props.highlight && props.highlight.length > 0)
+
+// --- 线路/站点淡化透明度逻辑（图例高亮优先于规划结果高亮）---
+// 规则：
+// 1) 如果有 highlightLineId（图例点了某条线）：
+//    - 选中线路 + 其站点：1
+//    - 非选中线路：0.2；非选中站点：0.55（换乘站只要跨线含选中也保留）
+// 2) 否则如果有规划结果（routeDimmed）：非路径段 0.25
+// 3) 否则：全 1
+function lineOpacity(lineId) {
+  if (props.highlightLineId) {
+    return lineId === props.highlightLineId ? 1 : 0.2
+  }
+  return routeDimmed.value ? 0.25 : 1
+}
+// 规划路径段（Highlight Polyline）的透明度：图例高亮时也要区分选中的线
+function routeSegOpacity(lineId) {
+  if (props.highlightLineId) {
+    return lineId === props.highlightLineId ? 0.98 : 0.25
+  }
+  return 0.95
+}
+// 站点的透明度：换乘站（多线路）只要任一线处于高亮态就保留，否则淡
+function stationOpacity(s) {
+  if (!props.highlightLineId) return 1
+  const lines = s.lines || []
+  return lines.includes(props.highlightLineId) ? 1 : 0.55
+}
 
 // --- SVG 容器尺寸追踪（用于计算自适应基础尺寸）---
 const svgRect = ref({ width: 0, height: 0 })
@@ -155,12 +171,12 @@ const fitScale = computed(() => {
 // 完全补偿（/fitScale）会导致手机端 SVG 坐标系中值过大，文字比站间距还宽
 // 平方根补偿（/sqrt(fitScale)）在手机端折中：屏幕值略小但 SVG 比例合理
 // 这些值在 SVG 坐标系中，会随用户缩放（scale）自然等比缩放
-const FONT_TARGET = 2  // 屏幕上目标字号（px）—— 尽可能小，避免压住线路
+const FONT_TARGET = 2 // 屏幕上目标字号（px）—— 尽可能小，避免压住线路
 const RADIUS_NORMAL = 1.5   // 普通站屏幕目标半径
-const RADIUS_TRANSFER = 2 // 换乘站屏幕目标半径
-const RADIUS_HIGHLIGHT = 3 // 高亮站屏幕目标半径
-const LINE_W = 1.5        // 线路屏幕目标宽度
-const LINE_W_HL = 3       // 高亮线路屏幕目标宽度
+const RADIUS_TRANSFER = 1.5 // 换乘站屏幕目标半径
+const RADIUS_HIGHLIGHT = 2 // 高亮站屏幕目标半径
+const LINE_W = 1       // 线路屏幕目标宽度
+const LINE_W_HL = 1.5       // 高亮线路屏幕目标宽度
 const STROKE_W = 0.5       // 站点描边屏幕目标宽度
 
 // 平方根补偿：fitScale=0.375 时补偿因子=1.63（而非完全补偿的 2.67）
@@ -361,13 +377,6 @@ const stationAngles = computed(() => {
   return result
 })
 
-const legendOpen = ref(false)
-
-// 切换图例折叠/展开
-function toggleLegend() {
-  legendOpen.value = !legendOpen.value
-}
-
 const stations = computed(() => {
   if (!props.cityData) return []
   // 使用吸附后的坐标（每个站点都投影到了最近线路段上）
@@ -486,7 +495,7 @@ const labelData = computed(() => {
   const charH = fs * 1.2
   const padX = fs * 0.2
   const padY = fs * 0.15
-  const gap = fs * 1.0
+  const gap = fs * 0.9
 
   const visR = (s) => svgRadius(s) + baseStrokeWidth.value
   const segs = lineSegments.value

@@ -21,58 +21,48 @@
       <button class="btn plan-btn" :disabled="!canPlan" @click="$emit('plan')">规划</button>
       <button class="btn clear-btn" :disabled="!hasRoute" @click="onClear" title="清除">清除</button>
     </div>
-    <!-- 搜索补全下拉（只显示当前 active 输入框的下拉） -->
-    <Teleport to="body">
+    <!-- 搜索补全下拉：直接定位在输入框下方，类似原生下拉框 -->
+    <div v-if="active === 'start' && startResults.length" class="datalist">
       <div
-        v-if="active === 'start' && startResults.length"
-        class="datalist"
-        :style="startDropdownStyle"
+        class="item"
+        v-for="r in startResults"
+        :key="r.id"
+        @click="pick('start', r)"
       >
-        <div
-          class="item"
-          v-for="r in startResults"
-          :key="r.id"
-          @click="pick('start', r)"
-        >
-          <span class="station-name">{{ r.name }}</span>
-          <span class="badges">
-            <span
-              v-for="ln in r.lines"
-              :key="ln"
-              class="line-badge"
-              :style="lineStyle(ln)"
-            >{{ shortLineName(ln) }}</span>
-          </span>
-        </div>
+        <span class="station-name">{{ r.name }}</span>
+        <span class="badges">
+          <span
+            v-for="ln in r.lines"
+            :key="ln"
+            class="line-badge"
+            :style="lineStyle(ln)"
+          >{{ shortLineName(ln) }}</span>
+        </span>
       </div>
+    </div>
+    <div v-if="active === 'end' && endResults.length" class="datalist">
       <div
-        v-if="active === 'end' && endResults.length"
-        class="datalist"
-        :style="endDropdownStyle"
+        class="item"
+        v-for="r in endResults"
+        :key="r.id"
+        @click="pick('end', r)"
       >
-        <div
-          class="item"
-          v-for="r in endResults"
-          :key="r.id"
-          @click="pick('end', r)"
-        >
-          <span class="station-name">{{ r.name }}</span>
-          <span class="badges">
-            <span
-              v-for="ln in r.lines"
-              :key="ln"
-              class="line-badge"
-              :style="lineStyle(ln)"
-            >{{ shortLineName(ln) }}</span>
-          </span>
-        </div>
+        <span class="station-name">{{ r.name }}</span>
+        <span class="badges">
+          <span
+            v-for="ln in r.lines"
+            :key="ln"
+            class="line-badge"
+            :style="lineStyle(ln)"
+          >{{ shortLineName(ln) }}</span>
+        </span>
       </div>
-    </Teleport>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { searchStations } from '../lib/loadData.js'
 
 const props = defineProps({
@@ -91,9 +81,6 @@ const containerRef = ref(null)
 const startInputRef = ref(null)
 const endInputRef = ref(null)
 let skipNextWatch = false
-
-const startDropdownStyle = ref({})
-const endDropdownStyle = ref({})
 
 const hasRoute = computed(() => !!(props.startId || props.endId))
 
@@ -120,40 +107,17 @@ function shortLineName(lineId) {
   return name.split('/')[0].trim()
 }
 
-function updateDropdownPos() {
-  nextTick(() => {
-    const startEl = startInputRef.value
-    const endEl = endInputRef.value
-    if (startEl) {
-      const r = startEl.getBoundingClientRect()
-      startDropdownStyle.value = {
-        position: 'fixed',
-        left: r.left + 'px',
-        top: (r.bottom + 4) + 'px',
-        minWidth: r.width + 'px',
-        zIndex: 1000
-      }
-    }
-    if (endEl) {
-      const r = endEl.getBoundingClientRect()
-      endDropdownStyle.value = {
-        position: 'fixed',
-        left: r.left + 'px',
-        top: (r.bottom + 4) + 'px',
-        minWidth: r.width + 'px',
-        zIndex: 1000
-      }
-    }
-  })
-}
-
 function onInput(which) {
   const q = which === 'start' ? startQuery.value : endQuery.value
-  // 搜索结果数量加大到 20
+  // 输入为空时不显示搜索提示
+  if (!q || !q.trim()) {
+    if (which === 'start') startResults.value = []
+    else endResults.value = []
+    return
+  }
   const results = searchStations(props.cityData, q, 20)
   if (which === 'start') startResults.value = results
   else endResults.value = results
-  updateDropdownPos()
 }
 
 function pick(which, r) {
@@ -196,15 +160,18 @@ function onClear() {
 watch([startQuery, endQuery, active, () => props.cityData], () => {
   if (skipNextWatch) {
     skipNextWatch = false
-    updateDropdownPos()
     return
   }
+  // 输入为空时不显示搜索提示弹窗
   if (active.value === 'start') {
-    startResults.value = searchStations(props.cityData, startQuery.value, 20)
+    startResults.value = startQuery.value && startQuery.value.trim()
+      ? searchStations(props.cityData, startQuery.value, 20)
+      : []
   } else {
-    endResults.value = searchStations(props.cityData, endQuery.value, 20)
+    endResults.value = endQuery.value && endQuery.value.trim()
+      ? searchStations(props.cityData, endQuery.value, 20)
+      : []
   }
-  updateDropdownPos()
 }, { flush: 'nextTick' })
 
 watch(() => props.cityData, () => {
@@ -249,23 +216,30 @@ function reset() {
   active.value = 'start'
 }
 
-defineExpose({ setStationFromMap, setStart, setEnd, reset, onClear, updateDropdownPos })
+defineExpose({ setStationFromMap, setStart, setEnd, reset, onClear })
 </script>
 
 <style scoped>
 .search-container {
   position: relative;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
 }
 .search-row {
   display: flex;
   align-items: center;
   gap: 4px;
   width: 100%;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
 }
 .search-row .input {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
+  max-width: 100%;
   padding: 6px 8px;
   font-size: 12px;
   height: 30px;
@@ -290,18 +264,21 @@ defineExpose({ setStationFromMap, setStart, setEnd, reset, onClear, updateDropdo
   font-size: 12px;
   height: 30px;
 }
-</style>
-
-<style>
-/* 下拉框细节样式（Teleport 到 body，不能 scoped）
-   滚动和 max-height 在全局 style.css 中统一设置，避免重复 */
+/* 下拉框：绝对定位在搜索行正下方，类似原生下拉 */
 .datalist {
-  background: #1e2229;
-  border: 1px solid #3a3f4b;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 2px;
+  max-height: 220px;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #ffffff;
+  border: 1px solid #e0e3e8;
   border-radius: 6px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-  color: #fff;
-  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  z-index: 50;
 }
 .datalist .item {
   display: flex;
@@ -311,9 +288,11 @@ defineExpose({ setStationFromMap, setStart, setEnd, reset, onClear, updateDropdo
   padding: 6px 10px;
   cursor: pointer;
   white-space: nowrap;
+  color: #1a1d24;
+  font-size: 13px;
 }
 .datalist .item:hover {
-  background: #2a303c;
+  background: #f0f2f5;
 }
 .datalist .station-name {
   flex-shrink: 0;
