@@ -82,7 +82,7 @@
             :font-size="baseFontSize"
             :font-weight="s.isTransfer || s.highlight ? 600 : 400"
             :fill="s.highlight ? '#fff' : 'var(--text)'"
-            style="pointer-events: none; paint-order: stroke; stroke: rgba(0,0,0,0.8); stroke-width: 3px"
+            style="pointer-events: none"
           >{{ s.name }}</text>
         </g>
       </g>
@@ -156,12 +156,12 @@ const fitScale = computed(() => {
 // 平方根补偿（/sqrt(fitScale)）在手机端折中：屏幕值略小但 SVG 比例合理
 // 这些值在 SVG 坐标系中，会随用户缩放（scale）自然等比缩放
 const FONT_TARGET = 4     // 屏幕上目标字号（px）—— 尽可能小，避免压住线路
-const RADIUS_NORMAL = 3   // 普通站屏幕目标半径
-const RADIUS_TRANSFER = 5 // 换乘站屏幕目标半径
-const RADIUS_HIGHLIGHT = 6 // 高亮站屏幕目标半径
-const LINE_W = 4          // 线路屏幕目标宽度
-const LINE_W_HL = 6       // 高亮线路屏幕目标宽度
-const STROKE_W = 1.3      // 站点描边屏幕目标宽度
+const RADIUS_NORMAL = 2   // 普通站屏幕目标半径
+const RADIUS_TRANSFER = 3.5 // 换乘站屏幕目标半径
+const RADIUS_HIGHLIGHT = 4.5 // 高亮站屏幕目标半径
+const LINE_W = 1.5        // 线路屏幕目标宽度
+const LINE_W_HL = 3       // 高亮线路屏幕目标宽度
+const STROKE_W = 0.5       // 站点描边屏幕目标宽度
 
 // 平方根补偿：fitScale=0.375 时补偿因子=1.63（而非完全补偿的 2.67）
 function adapt(v) {
