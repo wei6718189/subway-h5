@@ -7,9 +7,13 @@
 set -e
 
 # ==================== 必填配置 ====================
-# 腾讯云 API 密钥：https://console.cloud.tencent.com/cam/capi
-SECRET_ID="REDACTED_SECRET_ID"
-SECRET_KEY="REDACTED_SECRET_KEY"
+# 腾讯云 API 密钥：从环境变量读取，避免泄露到 git 历史
+#   获取地址：https://console.cloud.tencent.com/cam/capi
+#   使用前请先 export：
+#     export COS_SECRET_ID="你的SecretId"
+#     export COS_SECRET_KEY="你的SecretKey"
+SECRET_ID="${COS_SECRET_ID:?❌ 请先 export COS_SECRET_ID}"
+SECRET_KEY="${COS_SECRET_KEY:?❌ 请先 export COS_SECRET_KEY}"
 
 # 存储桶信息
 APP_ID="1322572851"
