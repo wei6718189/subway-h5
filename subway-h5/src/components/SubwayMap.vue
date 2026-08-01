@@ -792,8 +792,11 @@ function zoomBy(factor) {
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
 
+// 默认缩放：1.5 让地铁图初始显示更大一些，便于查看站点
+const DEFAULT_SCALE = 1.5
+
 function resetView() {
-  scale.value = 1
+  scale.value = DEFAULT_SCALE
   tx.value = 0
   ty.value = 0
 }
