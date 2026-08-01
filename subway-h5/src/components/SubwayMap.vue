@@ -525,9 +525,13 @@ const labelData = computed(() => {
     const mid  = make8(baseR * 1.8)
     const far  = make8(baseR * 3.0)
 
-    // 水平线：上下优先 → 对角 → 左右；垂直线：左右优先 → 对角 → 上下
+    // 换乘站：优先对角 → 再水平/垂直两侧，避免十字交叉线路上下左右都压线
+    // 单线路站：水平线上下优先，垂直线左右优先
     function prioritize(arr) {
       const [top, bot, tr, tl, br, bl, right, left] = arr
+      if (s.isTransfer) {
+        return [tr, tl, br, bl, right, left, top, bot]
+      }
       return isHorizontal
         ? [top, bot, tr, tl, br, bl, right, left]
         : [right, left, tr, tl, br, bl, top, bot]
@@ -537,9 +541,14 @@ const labelData = computed(() => {
   }
 
   // 计算标签矩形压住的线路段数量（排除经过站点自身的线段）
+  // 换乘站缩小 skipDist + 扩大碰撞边距，避免漏判十字交叉线路的压线
   function countLineCollisions(s, bx, by, bw, bh) {
-    const skipDist = visR(s) + baseLineWidth.value
-    const m = fs * 0.8
+    // 换乘站：只跳过圆圈内的线段，让附近线路也参与碰撞判定，避免上方位置误以为不压线
+    const skipDist = s.isTransfer
+      ? svgRadius(s) * 1.2
+      : visR(s) + baseLineWidth.value
+    // 换乘站扩大边距，视觉上贴得近的也算压线
+    const m = s.isTransfer ? fs * 1.2 : fs * 0.8
     let count = 0
     for (const seg of segs) {
       if (pointToSegDist(s.x, s.y, seg.x1, seg.y1, seg.x2, seg.y2) < skipDist) continue
