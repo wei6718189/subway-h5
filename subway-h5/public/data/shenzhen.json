@@ -4573,7 +4573,11 @@
                 "440300024056"
             ],
             "isTransfer": true,
-            "pinyin": "che gong miao"
+            "pinyin": "che gong miao",
+            "labelOverride": {
+                "position": "br",
+                "distance": "near"
+            }
         },
         "sz_440300024063020": {
             "name": "竹子林",
@@ -4659,7 +4663,11 @@
                 "900000094840"
             ],
             "isTransfer": true,
-            "pinyin": "ShenDa"
+            "pinyin": "ShenDa",
+            "labelOverride": {
+                "position": "tl",
+                "distance": "near"
+            }
         },
         "sz_440300024063013": {
             "name": "桃园",
@@ -5089,11 +5097,7 @@
                 "440300024076"
             ],
             "isTransfer": false,
-            "pinyin": "Qiao ChengBei",
-            "labelOverride": {
-                "position": "top",
-                "distance": "near"
-            }
+            "pinyin": "Qiao ChengBei"
         },
         "sz_440300024076015": {
             "name": "深康",
@@ -5118,11 +5122,7 @@
                 "440300024050"
             ],
             "isTransfer": true,
-            "pinyin": "AnTuoShan",
-            "labelOverride": {
-                "position": "left",
-                "distance": "near"
-            }
+            "pinyin": "AnTuoShan"
         },
         "sz_440300024076017": {
             "name": "侨香",
@@ -5134,11 +5134,7 @@
                 "440300024076"
             ],
             "isTransfer": false,
-            "pinyin": "QiaoXiang",
-            "labelOverride": {
-                "position": "bot",
-                "distance": "mid"
-            }
+            "pinyin": "QiaoXiang"
         },
         "sz_440300024076018": {
             "name": "香蜜",
@@ -5150,11 +5146,7 @@
                 "440300024076"
             ],
             "isTransfer": false,
-            "pinyin": "XiangMi",
-            "labelOverride": {
-                "position": "top",
-                "distance": "mid"
-            }
+            "pinyin": "XiangMi"
         },
         "sz_440300024076019": {
             "name": "香梅北",
