@@ -171,9 +171,9 @@ const fitScale = computed(() => {
 // 完全补偿（/fitScale）会导致手机端 SVG 坐标系中值过大，文字比站间距还宽
 // 平方根补偿（/sqrt(fitScale)）在手机端折中：屏幕值略小但 SVG 比例合理
 // 这些值在 SVG 坐标系中，会随用户缩放（scale）自然等比缩放
-const FONT_TARGET = 2 // 屏幕上目标字号（px）—— 尽可能小，避免压住线路
+const FONT_TARGET = 2.5 // 屏幕上目标字号（px）—— 尽可能小，避免压住线路
 const RADIUS_NORMAL = 1.5   // 普通站屏幕目标半径
-const RADIUS_TRANSFER = 1.5 // 换乘站屏幕目标半径
+const RADIUS_TRANSFER = 2.5// 换乘站屏幕目标半径
 const RADIUS_HIGHLIGHT = 2 // 高亮站屏幕目标半径
 const LINE_W = 1       // 线路屏幕目标宽度
 const LINE_W_HL = 1.5       // 高亮线路屏幕目标宽度
@@ -447,11 +447,13 @@ const stations = computed(() => {
     // 用于判断水平/垂直的绝对值角度（取绝对值供 getCandidates 使用）
     const absLineAngle = Math.abs(lineAngle)
     // 从所有同名 dupIds 的 station 对象里找第一个配置了 labelOverride 的（换乘站兼容）
+    // 支持 position 方式和 dx/dy 方式
     let labelOverride = null
     for (const did of dupIds) {
       const dst = props.cityData?.stations?.[did]
-      if (dst?.labelOverride && (dst.labelOverride.dx != null || dst.labelOverride.dy != null)) {
-        labelOverride = dst.labelOverride
+      const ov = dst?.labelOverride
+      if (ov && (ov.position != null || ov.dx != null || ov.dy != null)) {
+        labelOverride = ov
         break
       }
     }
@@ -705,24 +707,33 @@ function isLabelVisible(s) {
   return labelData.value.get(s.id)?.visible === true
 }
 
-// 换乘站双向箭头图标：在以 (cx,cy) 为中心、r 为内圈半径的圆内绘制
-// 严格按示例 SVG 比例（viewBox 200x200, 圆心 100,100, r=94）：
-//   水平线 x: 52→148 (半长 48 ≈ 0.51r)
-//   箭头头内侧 x: 70/130 (距圆心 30 ≈ 0.32r)
-//   箭头头纵向偏移: ±18 ≈ 0.19r
+// 换乘站图标：双鱼互追（头尾相接，形似阴阳鱼）
+// 上鱼头朝右、尾在左；下鱼头朝左、尾在右
 function transferIconPath(cx, cy, r) {
-  const half = r * 0.51    // 箭头水平半长
-  const headIn = r * 0.32  // 箭头头内侧距圆心
-  const headY = r * 0.19   // 箭头头纵向偏移
+  const half = r * 0.55     // 鱼身半长
+  const arc  = r * 0.35     // 身体弧线高度
+  const offY = r * 0.12     // 上下鱼偏离中线距离
+  const tail = r * 0.28     // 尾巴长度
+  const head = r * 0.22     // 箭头头部大小
   return [
-    // 水平线
-    `M ${cx - half} ${cy} H ${cx + half}`,
-    // 右箭头头（指向右）
-    `M ${cx + half} ${cy} L ${cx + headIn} ${cy - headY}`,
-    `M ${cx + half} ${cy} L ${cx + headIn} ${cy + headY}`,
-    // 左箭头头（指向左）
-    `M ${cx - half} ${cy} L ${cx - headIn} ${cy - headY}`,
-    `M ${cx - half} ${cy} L ${cx - headIn} ${cy + headY}`
+    // ── 上鱼：头朝右，尾在左 ──
+    // 身体弧线
+    `M ${cx - half} ${cy - offY} Q ${cx} ${cy - offY - arc} ${cx + half} ${cy - offY}`,
+    // 头部箭头（右端）
+    `M ${cx + half} ${cy - offY} L ${cx + half - head} ${cy - offY - head * 0.7}`,
+    `M ${cx + half} ${cy - offY} L ${cx + half - head} ${cy - offY + head * 0.7}`,
+    // 尾巴分叉（左端）
+    `M ${cx - half} ${cy - offY} L ${cx - half - tail} ${cy - offY - tail * 0.6}`,
+    `M ${cx - half} ${cy - offY} L ${cx - half - tail} ${cy - offY + tail * 0.6}`,
+    // ── 下鱼：头朝左，尾在右（上下镜像）──
+    // 身体弧线
+    `M ${cx + half} ${cy + offY} Q ${cx} ${cy + offY + arc} ${cx - half} ${cy + offY}`,
+    // 头部箭头（左端）
+    `M ${cx - half} ${cy + offY} L ${cx - half + head} ${cy + offY - head * 0.7}`,
+    `M ${cx - half} ${cy + offY} L ${cx - half + head} ${cy + offY + head * 0.7}`,
+    // 尾巴分叉（右端）
+    `M ${cx + half} ${cy + offY} L ${cx + half + tail} ${cy + offY - tail * 0.6}`,
+    `M ${cx + half} ${cy + offY} L ${cx + half + tail} ${cy + offY + tail * 0.6}`
   ].join(' ')
 }
 
