@@ -344,10 +344,16 @@ const snappedStationCoords = computed(() => {
 
 // 每个站点ID的线路方向角度（带符号的真实角度），用于标签旋转
 // 返回有向角度: -90~90，atan2(y,x)，正值表示线路向右下方倾斜
+// 改进：对前后段夹角较大的"拐点站"，取更长/更直的那段角度（而非简单平均），避免拐弯污染方向判定
 const stationAngles = computed(() => {
   const angles = new Map()
   if (!props.cityData) return angles
   const c = stationCoords.value
+  function normAngle(a) {
+    if (a > 90) a -= 180
+    if (a <= -90) a += 180
+    return a
+  }
   for (const line of props.cityData.lines || []) {
     const ids = line.stationIds || []
     for (let i = 0; i < ids.length; i++) {
@@ -356,16 +362,33 @@ const stationAngles = computed(() => {
       if (!co) continue
       const prevCo = i > 0 ? c[ids[i - 1]] : null
       const nextCo = i < ids.length - 1 ? c[ids[i + 1]] : null
-      const vectors = []
-      if (prevCo) vectors.push([co.x - prevCo.x, co.y - prevCo.y])
-      if (nextCo) vectors.push([nextCo.x - co.x, nextCo.y - co.y])
-      if (!vectors.length) continue
-      let ax = 0, ay = 0
-      for (const [vx, vy] of vectors) { ax += vx; ay += vy }
-      // 带符号的真实角度，规范化到 (-90, 90] 区间
-      let angle = Math.atan2(ay, ax) * 180 / Math.PI
-      if (angle > 90) angle -= 180
-      if (angle <= -90) angle += 180
+      const prevVec = prevCo ? [co.x - prevCo.x, co.y - prevCo.y] : null
+      const nextVec = nextCo ? [nextCo.x - co.x, nextCo.y - co.y] : null
+      let angle
+      if (prevVec && nextVec) {
+        const prevAng = Math.atan2(prevVec[1], prevVec[0]) * 180 / Math.PI
+        const nextAng = Math.atan2(nextVec[1], nextVec[0]) * 180 / Math.PI
+        // 计算前后段的真实夹角（考虑方向对称性，取 <180 的那个）
+        let diff = Math.abs(nextAng - prevAng)
+        if (diff > 180) diff = 360 - diff
+        const prevLen = Math.hypot(prevVec[0], prevVec[1])
+        const nextLen = Math.hypot(nextVec[0], nextVec[1])
+        if (diff < 30) {
+          // 缓弯：正常平均
+          const ax = prevVec[0] + nextVec[0], ay = prevVec[1] + nextVec[1]
+          angle = Math.atan2(ay, ax) * 180 / Math.PI
+        } else {
+          // 急转弯：取后段的角度（后段代表后续多站的连续走向，前段通常是拐弯过来的）
+          angle = nextAng
+        }
+      } else if (nextVec) {
+        angle = Math.atan2(nextVec[1], nextVec[0]) * 180 / Math.PI
+      } else if (prevVec) {
+        angle = Math.atan2(prevVec[1], prevVec[0]) * 180 / Math.PI
+      } else {
+        continue
+      }
+      angle = normAngle(angle)
       if (!angles.has(id)) angles.set(id, [])
       angles.get(id).push(angle)
     }
@@ -423,9 +446,19 @@ const stations = computed(() => {
       : 0
     // 用于判断水平/垂直的绝对值角度（取绝对值供 getCandidates 使用）
     const absLineAngle = Math.abs(lineAngle)
+    // 从所有同名 dupIds 的 station 对象里找第一个配置了 labelOverride 的（换乘站兼容）
+    let labelOverride = null
+    for (const did of dupIds) {
+      const dst = props.cityData?.stations?.[did]
+      if (dst?.labelOverride && (dst.labelOverride.dx != null || dst.labelOverride.dy != null)) {
+        labelOverride = dst.labelOverride
+        break
+      }
+    }
     return {
       id, name: st.name, x: avgX, y: avgY, fill, stroke, highlight,
-      isTransfer, lines, lineAngle, absLineAngle
+      isTransfer, lines, lineAngle, absLineAngle,
+      labelOverride
     }
   })
 })
@@ -561,11 +594,53 @@ const labelData = computed(() => {
   const placed = []
 
   for (const s of sorted) {
-    if (!showLabel(s)) { result.set(s.id, { visible: false }); continue }
+    const ov = s.labelOverride
+    const hasOverride = ov && (ov.position || ov.dx != null || ov.dy != null)
+    // 配置了 labelOverride 的站：强制显示（跳过 showLabel 过滤），因为用户明确指定了位置
+    if (!showLabel(s) && !hasOverride) { result.set(s.id, { visible: false }); continue }
 
     const nameLen = (s.name || '').length
     const bw = nameLen * charW + padX * 2
     const bh = charH + padY * 2
+
+    // 单站自定义覆盖：支持两种配置方式
+    //   方式 A（推荐）: { position: "top", distance: "near" }  ← 语义化方向，8 选 1
+    //   方式 B（兼容）: { dx: 0, dy: -24, anchor: "middle" }   ← 直接像素偏移
+    if (hasOverride) {
+      let dx, dy, anchor
+      if (ov.position) {
+        // 方式 A：根据方向 + 距离档位自动计算偏移
+        const baseR = visR(s) + gap
+        const distMul = ov.distance === 'mid' ? 1.8 : ov.distance === 'far' ? 3.0 : 1.0
+        const r = baseR * distMul
+        const diag = r * 0.707
+        const POS_MAP = {
+          top:   { anchor: 'middle', ox: 0,       oy: -r },
+          bot:   { anchor: 'middle', ox: 0,       oy: r + charH },
+          tr:    { anchor: 'start',  ox: diag,    oy: -diag },
+          tl:    { anchor: 'end',    ox: -diag,   oy: -diag },
+          br:    { anchor: 'start',  ox: diag,    oy: diag + charH },
+          bl:    { anchor: 'end',    ox: -diag,   oy: diag + charH },
+          right: { anchor: 'start',  ox: r,       oy: charH * 0.35 },
+          left:  { anchor: 'end',    ox: -r,      oy: charH * 0.35 },
+        }
+        const pos = POS_MAP[ov.position] || POS_MAP.top
+        dx = pos.ox; dy = pos.oy; anchor = pos.anchor
+      } else {
+        // 方式 B：直接使用像素偏移
+        dx = ov.dx ?? 0; dy = ov.dy ?? 0; anchor = ov.anchor || 'start'
+      }
+      const tx_ = s.x + dx
+      const ty_ = s.y + dy
+      let bx
+      if (anchor === 'start') bx = tx_ - padX
+      else if (anchor === 'end') bx = tx_ - bw + padX
+      else bx = tx_ - bw / 2
+      const by = ty_ - charH - padY
+      placed.push({ x1: bx, y1: by, x2: bx + bw, y2: by + bh })
+      result.set(s.id, { visible: true, dx, dy, anchor })
+      continue
+    }
 
     const candidates = getCandidates(s)
 
