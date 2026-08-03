@@ -46,7 +46,7 @@
     <SubwayMap
       ref="mapRef"
       :city-data="cityData"
-      :highlight="route ? route.legs : []"
+      :highlight="highlightLegs"
       :start-id="startId"
       :end-id="endId"
       :loading="loading"
@@ -63,7 +63,8 @@
         :style="popupPosStyle"
         @click.stop
       >
-        <div class="popup-title">{{ popupStation.name }}</div>
+        <div class="popup-title" @click="copyStationName" title="点击复制站名">{{ popupStation.name }}</div>
+        <div class="popup-copy-tip" v-if="copied">已复制到剪贴板 ✓</div>
         <div class="popup-lines">
           <span
             v-for="ln in popupStation.lines"
@@ -97,7 +98,13 @@
         @select-station="onPopupSelect"
       />
       <div class="route-scroll-container">
-        <RouteResult :route="route" :city-data="cityData" @clear="onClearRoute" />
+        <RouteResult
+          :routes="routePlans"
+          :active-key="activeKey"
+          :city-data="cityData"
+          @select="onSelectPlan"
+          @clear="onClearRoute"
+        />
       </div>
     </div>
   </div>
@@ -113,7 +120,7 @@ import { loadCity, PROVIDERS, BAIDU_CITIES, CITIES } from './lib/loadData.js'
 import { planRoute } from './lib/graph.js'
 
 const currentCity = ref('shenzhen')
-const currentProvider = ref('amap')
+const currentProvider = ref('baidu')
 const providers = PROVIDERS
 const currentProviderName = computed(() => providers.find(p => p.id === currentProvider.value)?.name || '')
 const providerRef = ref(null)
@@ -124,6 +131,32 @@ const loading = ref(false)
 const startId = ref('')
 const endId = ref('')
 const route = ref(null)
+const activeKey = ref('fastest')
+
+// 当前选中方案的乘车段，用于地图高亮
+const highlightLegs = computed(() => {
+  if (!route.value) return []
+  const plan = activeKey.value === 'leastTransfer' ? route.value.leastTransfer : route.value.fastest
+  return plan ? plan.legs : []
+})
+
+// 组装展示方案列表；若最少换乘与最快路线完全一致，则只展示最快
+const routePlans = computed(() => {
+  if (!route.value) return []
+  const plans = [{ key: 'fastest', label: '最快路线', route: route.value.fastest }]
+  const l = route.value.leastTransfer
+  if (l && !samePlan(route.value.fastest, l)) {
+    plans.push({ key: 'leastTransfer', label: '最少换乘', route: l })
+  }
+  return plans
+})
+
+function samePlan(a, b) {
+  if (!a || !b) return false
+  if (a.transferCount !== b.transferCount) return false
+  const seq = legs => legs.flatMap(leg => leg.stops).join('>')
+  return seq(a.legs) === seq(b.legs)
+}
 
 const mapRef = ref(null)
 const searchRef = ref(null)
@@ -174,6 +207,37 @@ const popupStationId = ref('')
 const popupPosStyle = ref({})
 const popupPlacement = ref('bottom') // 'top' or 'bottom'
 const popupStation = ref(null)
+const copied = ref(false)
+let copyTimer = null
+
+async function copyStationName() {
+  const name = popupStation.value?.name
+  if (!name) return
+  let ok = false
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(name)
+      ok = true
+    }
+  } catch (e) { /* 落到降级方案 */ }
+  if (!ok) {
+    // 降级：临时 textarea + execCommand（兼容非安全上下文 / 旧浏览器）
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = name
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+    } catch (e) { ok = false }
+  }
+  copied.value = ok
+  if (copyTimer) clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => { copied.value = false }, 1500)
+}
 
 function lineColor(lineId) {
   return cityData.value?.lines?.find(l => l.id === lineId)?.color || '#666'
@@ -357,13 +421,26 @@ function onPlan() {
     return
   }
   route.value = result
+  activeKey.value = 'fastest'
+  const plan = result.fastest
   const stationIds = []
-  for (const leg of result.legs) stationIds.push(...leg.stops)
+  for (const leg of plan.legs) stationIds.push(...leg.stops)
+  mapRef.value?.zoomToStations(stationIds)
+}
+
+function onSelectPlan(key) {
+  activeKey.value = key
+  if (!route.value) return
+  const plan = key === 'leastTransfer' ? route.value.leastTransfer : route.value.fastest
+  if (!plan) return
+  const stationIds = []
+  for (const leg of plan.legs) stationIds.push(...leg.stops)
   mapRef.value?.zoomToStations(stationIds)
 }
 
 function onClearRoute() {
   route.value = null
+  activeKey.value = 'fastest'
 }
 
 onCityChange('shenzhen')
@@ -415,6 +492,17 @@ onCityChange('shenzhen')
   color: #1a1d24;
   text-align: center;
   margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.popup-title:active {
+  opacity: 0.6;
+}
+.popup-copy-tip {
+  font-size: 11px;
+  color: #2e9e5b;
+  text-align: center;
+  margin-top: -4px;
 }
 .popup-lines {
   display: flex;

@@ -18,6 +18,41 @@ const BAIDU_CITY_CODE = { shenzhen: 340, guangzhou: 257, nanning: 326 }
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
+// 按「城市 → 站名」注入 labelOverride，用于修正手机端标签被算法推远的问题
+// 与高德数据格式保持一致：{ position: 'top'|'bot'|'left'|'right'|'tl'|'tr'|'bl'|'br', distance: 'near'|'mid'|'far' }
+const LABEL_OVERRIDES = {
+  shenzhen: {
+    '桥头西': { position: 'bot', distance: 'near' },
+    '福海西': { position: 'top', distance: 'near' },
+    '国展南': { position: 'bl', distance: 'near' },
+    '沙井西': { position: 'bot', distance: 'near' },
+    '福永': { position: 'right', distance: 'near' },
+    '桥头': { position: 'right', distance: 'near' },
+    '西丽': { position: 'top', distance: 'near' },
+    '西丽湖': { position: 'top', distance: 'near' },
+    '车公庙': { position: 'br', distance: 'near' },
+    '园山西坑': { position: 'bot', distance: 'near' },
+    '坪山': { position: 'bl', distance: 'near' },
+    '双龙': { position: 'top', distance: 'near' },
+    '布吉': { position: 'right', distance: 'near' },
+    // —— 第二批调整 ——
+    '东角头': { position: 'right', distance: 'near' },
+    '南油': { position: 'right', distance: 'near' },
+    '科苑': { position: 'right', distance: 'near' },
+    '科学馆': { position: 'right', distance: 'near' },
+    '荔湾': { position: 'right', distance: 'near' },
+    '潮汐公园': { position: 'right', distance: 'near' },
+    '老街': { position: 'right', distance: 'near' },
+    '光明城': { position: 'right', distance: 'near' },
+    '红树湾南': { position: 'bot', distance: 'near' },
+    '上屋': { position: 'bot', distance: 'near' },
+    '前湾': { position: 'top', distance: 'near' },
+    '大运': { position: 'top', distance: 'near' },
+    '清湖': { position: 'top', distance: 'near' }
+  },
+  guangzhou: {}
+}
+
 // 官方 lc 缺失时的兜底调色板
 const PALETTE = [
   '#E4002B', '#0072CE', '#00A651', '#F39700', '#92278F', '#00A0E9',
@@ -66,6 +101,19 @@ function parseLines(xml) {
   return lines
 }
 
+function isMetroLike(name) {
+  // 与高德口径对齐：保留地铁/APM/广佛/佛山地铁等城市轨道交通；
+  // 注意：保留有轨电车、城际铁路（用户要求），仅在与地铁图对比时按口径取舍。
+  return true
+}
+
+// 线路族：去掉括号里的支线/别名后缀，用于换乘判定。
+// 例：「龙华有轨电车(新澜-清湖)」「龙华有轨电车(清湖-下围)」同属「龙华有轨电车」族，
+// 共用走廊的站点不算换乘；「4号线(龙华线)」族为「4号线」，不影响地铁换乘判定。
+function lineFamily(id) {
+  return id.replace(/\([^)]*\)/g, '').trim()
+}
+
 async function fetchCity(cityId, code) {
   const url = `https://map.baidu.com/?qt=subways&c=${code}&t=${Date.now()}000`
   const xml = fetchXml(url)
@@ -85,7 +133,10 @@ async function fetchCity(cityId, code) {
       const nameKey = st.sid && st.sid.trim() ? st.sid.trim() : `${st.x},${st.y}`
       let mainId = nameToMain[nameKey]
       if (mainId == null) {
-        mainId = st.uid || nameKey
+        // 用站名（或坐标兜底）作主 id，不要用 uid：百度个别站点会复用他人 uid，
+        // 例如 5 号线「桂湾」复用了「宝华」的 uid，用 uid 作 id 会把桂湾错误合并进宝华，
+        // 表现为桂湾丢失、宝华在 5 号线里被计两次。站名在深圳/广州全局唯一，适合做合并键与 id。
+        mainId = nameKey
         nameToMain[nameKey] = mainId
       }
       if (!stations[mainId]) {
@@ -101,16 +152,24 @@ async function fetchCity(cityId, code) {
 
   const finalStations = {}
   let transfer = 0
+  const cityOverrides = LABEL_OVERRIDES[cityId] || {}
   for (const [id, s] of Object.entries(stations)) {
     const linesArr = [...s.lines]
-    finalStations[id] = {
+    if (linesArr.length === 0) continue // 过滤被有轨电车/城际独占的孤儿站
+    // 换乘判定按「线路族」而非原始线路数：同族支线（如龙华有轨电车两条支线）共用走廊，
+    // 其上的站点不算换乘；跨族（地铁 ↔ 有轨电车）才标换乘。
+    const fams = new Set(linesArr.map(lineFamily))
+    const obj = {
       id,
       name: s.name,
       x: s.x,
       y: s.y,
       lines: linesArr,
-      isTransfer: linesArr.length > 1
+      isTransfer: fams.size > 1
     }
+    const ov = cityOverrides[s.name]
+    if (ov) obj.labelOverride = ov
+    finalStations[id] = obj
     if (linesArr.length > 1) transfer++
   }
   return { lines: outLines, stations: finalStations, transfer }

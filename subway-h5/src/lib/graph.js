@@ -9,7 +9,9 @@ const DEFAULT_TRANSFER_SEC = 240 // 同站换乘平均 4 分钟
  * @param {object} cityData
  * @returns {Map<string, Array<{to:string, weight:number, type:'ride'|'transfer'}>>}
  */
-export function buildGraph(cityData) {
+export function buildGraph(cityData, opts = {}) {
+  const rideWeight = opts.rideWeight ?? DEFAULT_RIDE_SEC
+  const transferWeight = opts.transferWeight ?? DEFAULT_TRANSFER_SEC
   const adj = new Map()
   const addEdge = (a, b, weight, type) => {
     if (!adj.has(a)) adj.set(a, [])
@@ -22,8 +24,8 @@ export function buildGraph(cityData) {
     for (let i = 0; i < ids.length - 1; i++) {
       const a = `${ids[i]}@${line.id}`
       const b = `${ids[i + 1]}@${line.id}`
-      addEdge(a, b, DEFAULT_RIDE_SEC, 'ride')
-      addEdge(b, a, DEFAULT_RIDE_SEC, 'ride')
+      addEdge(a, b, rideWeight, 'ride')
+      addEdge(b, a, rideWeight, 'ride')
     }
   }
 
@@ -35,8 +37,8 @@ export function buildGraph(cityData) {
         for (let j = i + 1; j < lines.length; j++) {
           const a = `${sid}@${lines[i]}`
           const b = `${sid}@${lines[j]}`
-          addEdge(a, b, DEFAULT_TRANSFER_SEC, 'transfer')
-          addEdge(b, a, DEFAULT_TRANSFER_SEC, 'transfer')
+          addEdge(a, b, transferWeight, 'transfer')
+          addEdge(b, a, transferWeight, 'transfer')
         }
       }
     }
@@ -47,7 +49,7 @@ export function buildGraph(cityData) {
     const sFrom = cityData.stations?.[t.from]
     const sTo = cityData.stations?.[t.to]
     if (!sFrom || !sTo) continue
-    const w = t.walkSec || DEFAULT_TRANSFER_SEC
+    const w = t.walkSec || transferWeight
     for (const lf of sFrom.lines || []) {
       for (const lt of sTo.lines || []) {
         const a = `${t.from}@${lf}`
@@ -186,24 +188,39 @@ export function pathToLegs(path) {
 }
 
 /**
- * 规划并整理结果
- * @param {object} cityData
- * @param {string} startStationId
- * @param {string} endStationId
- * @returns {object|null} { totalSec, legs, transferCount, stationCount }
+ * 规划并整理结果，返回两个方案：
+ * - fastest：默认最短路线（按耗时/站数）
+ * - leastTransfer：最少换乘方案（换乘代价远大于站间代价，其次按真实耗时）
+ * 两个方案的 totalSec 均按真实估算重算，不会被规划权重污染。
+ * @returns {{fastest:object, leastTransfer:object}|null}
  */
 export function planRoute(cityData, startStationId, endStationId) {
-  const adj = buildGraph(cityData)
+  const fastest = computePlan(cityData, startStationId, endStationId, {})
+  const leastTransfer = computePlan(cityData, startStationId, endStationId, {
+    rideWeight: DEFAULT_RIDE_SEC,
+    transferWeight: 1000000
+  })
+  if (!fastest && !leastTransfer) return null
+  return {
+    fastest: fastest || leastTransfer,
+    leastTransfer: leastTransfer || fastest
+  }
+}
+
+/**
+ * 构建图 + 求最短路 + 整理结果
+ * @param {object} opts.rideWeight / opts.transferWeight Dijkstra 权重
+ */
+function computePlan(cityData, startStationId, endStationId, opts = {}) {
+  const adj = buildGraph(cityData, opts)
   const result = findShortestPath(adj, [startStationId], new Set([endStationId]))
   if (!result) return null
   const legs = pathToLegs(result.path)
   const transferCount = Math.max(0, legs.length - 1)
+  const rideStations = legs.reduce((s, leg) => s + Math.max(0, leg.stops.length - 1), 0)
+  // 按真实估算重算耗时，与规划用的 Dijkstra 权重无关
+  const totalSec = rideStations * DEFAULT_RIDE_SEC + transferCount * DEFAULT_TRANSFER_SEC
   const stationCount = result.path.filter((n, i, arr) =>
     i === 0 || n.stationId !== arr[i - 1].stationId).length
-  return {
-    totalSec: result.totalSec,
-    legs,
-    transferCount,
-    stationCount
-  }
+  return { totalSec, legs, transferCount, stationCount }
 }

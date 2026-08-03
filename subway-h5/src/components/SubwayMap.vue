@@ -15,15 +15,15 @@
       <g :transform="`translate(${tx} ${ty}) scale(${scale})`">
         <!-- 线路 -->
         <polyline
-          v-for="line in linePolys"
-          :key="'l-' + line.id"
-          :points="line.points"
-          :stroke="line.color"
-          :stroke-width="(highlightLineId && highlightLineId === line.id) ? baseLineWidthHL : baseLineWidth"
+          v-for="seg in lineSegPolys"
+          :key="seg.key"
+          :points="seg.points"
+          :stroke="seg.color"
+          :stroke-width="(highlightLineId && highlightLineId === seg.lineId) ? baseLineWidthHL : baseLineWidth"
           stroke-linejoin="round"
           stroke-linecap="round"
           fill="none"
-          :opacity="lineOpacity(line.id)"
+          :opacity="lineOpacity(seg.lineId)"
           style="transition: opacity 0.2s, stroke-width 0.2s"
         />
         <!-- 高亮路径段（规划结果线路，优先级最高） -->
@@ -215,30 +215,161 @@ const stationCoords = computed(() => {
   return map
 })
 
-const linePolys = computed(() => {
+// 几何重合走廊：把「投影后端点完全重合」的线路段归为一组
+// 不分站点 ID —— 只要两条线在某一段画在同一条轨迹上（哪怕站点序列不同）就算共线
+const corridorShares = computed(() => {
+  if (!props.cityData) return { geo: new Map(), segsByLine: new Map() }
+  const c = stationCoords.value
+  const geo = new Map()        // geoKey -> Set(lineId)
+  const segsByLine = new Map() // lineId -> [{i, ax,ay,bx,by, geoKey}]
+  const keyOf = (ax, ay, bx, by) => {
+    // 顺序无关，避免两条线反向经过同一段时 key 不同
+    let x1 = ax, y1 = ay, x2 = bx, y2 = by
+    if (x1 > x2 || (x1 === x2 && y1 > y2)) { [x1, x2] = [x2, x1]; [y1, y2] = [y2, y1] }
+    return `${Math.round(x1)},${Math.round(y1)}_${Math.round(x2)},${Math.round(y2)}`
+  }
+  for (const line of props.cityData.lines || []) {
+    const ids = line.stationIds || []
+    const items = []
+    for (let i = 0; i < ids.length - 1; i++) {
+      const ca = c[ids[i]], cb = c[ids[i + 1]]
+      if (!ca || !cb) continue
+      const k = keyOf(ca.x, ca.y, cb.x, cb.y)
+      items.push({ i, ax: ca.x, ay: ca.y, bx: cb.x, by: cb.y, geoKey: k })
+      if (!geo.has(k)) geo.set(k, new Set())
+      geo.get(k).add(line.id)
+    }
+    segsByLine.set(line.id, items)
+  }
+  return { geo, segsByLine }
+})
+
+function fmtPt(x, y) {
+  return `${x.toFixed(2)},${y.toFixed(2)}`
+}
+
+// 线路族：去掉括号里的支线/别名后缀，用于判断「同一条线路的不同支线」。
+// 例：「龙华有轨电车(新澜-清湖)」「龙华有轨电车(清湖-下围)」同属「龙华有轨电车」。
+function lineFamily(id) {
+  return String(id).replace(/\([^)]*\)/g, '').trim()
+}
+
+// 线路绘制：共线走廊处理
+// 规则：
+// 1) 有 line.path 的线路（高德）保持原样一条 polyline；
+// 2) 无 path 的线路按站点分段；
+// 3) 若某段落在「多条线重合的几何走廊」上：
+//    - 同族（如龙华有轨电车两条支线）→ 只画一次，居中；
+//    - 跨族（如 4 号线与 6 号线）→ 按垂直方向错开并排；
+// 4) 连续共线段做成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
+const lineSegPolys = computed(() => {
   if (!props.cityData) return []
-  const p = proj.value
-  return (props.cityData.lines || []).map(line => {
-    let pts = ''
-    // 优先使用高德提供的路径 polyline 点（更平滑准确）
+  const c = stationCoords.value
+  const { geo, segsByLine } = corridorShares.value
+  const gap = baseLineWidth.value * 1.25
+  const result = []
+
+  for (const line of props.cityData.lines || []) {
+    // 高德 path：保持原样
     if (line.path && line.path.length > 0) {
-      pts = line.path
+      const pts = line.path
         .map(([x, y]) => {
-          const pt = p.projectXY(x, y)
-          return `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`
+          const pt = proj.value.projectXY(x, y)
+          return fmtPt(pt.x, pt.y)
         })
         .join(' ')
-    } else {
-      // 回退：用站点坐标连线
-      const c = stationCoords.value
-      pts = (line.stationIds || [])
-        .map(id => c[id])
-        .filter(Boolean)
-        .map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`)
-        .join(' ')
+      if (pts) result.push({ key: `l-${line.id}-path`, lineId: line.id, color: line.color, points: pts })
+      continue
     }
-    return { id: line.id, color: line.color, points: pts }
-  }).filter(l => l.points)
+
+    const items = segsByLine.get(line.id) || []
+    if (!items.length) continue
+
+    // 预计算每个 segment 的共享线集合（按 geoKey）
+    const segs = items.map(it => {
+      const shared = [...(geo.get(it.geoKey) || new Set())].sort()
+      return { ...it, shared, sharedKey: shared.length > 1 ? shared.join('|') : '' }
+    })
+
+    // 按 sharedKey 把连续段聚成 run
+    let runStart = 0
+    for (let i = 1; i <= segs.length; i++) {
+      const runKey = segs[runStart].sharedKey
+      const nextKey = i < segs.length ? segs[i].sharedKey : null
+      if (i === segs.length || nextKey !== runKey) {
+        const run = segs.slice(runStart, i)
+
+        if (run[0].shared.length > 1) {
+          const shared = run[0].shared
+          const sharedFams = new Set(shared.map(lineFamily))
+
+          if (sharedFams.size === 1) {
+            // 同族共线：只让族内第一条线代表绘制一次，居中；其余同族线跳过，避免重复画线
+            if (shared[0] !== line.id) { runStart = i; continue }
+            const pts = [fmtPt(run[0].ax, run[0].ay)]
+            for (const s of run) pts.push(fmtPt(s.bx, s.by))
+            result.push({
+              key: `l-${line.id}-${runStart}`,
+              lineId: line.id,
+              color: line.color,
+              points: pts.join(' ')
+            })
+          } else {
+            // 跨族共线：按垂直方向错开并排
+            const idx = shared.indexOf(line.id)
+            const mag = (idx - (shared.length - 1) / 2) * gap
+
+            // 用 run 的累计方向算垂直方向（统一 canonical，保证同走廊两侧一致）
+            let dx = 0, dy = 0
+            for (const s of run) { dx += s.bx - s.ax; dy += s.by - s.ay }
+            if (dx < 0 || (dx === 0 && dy < 0)) { dx = -dx; dy = -dy }
+            const len = Math.hypot(dx, dy)
+            let ox = 0, oy = 0
+            if (len > 0) {
+              ox = (-dy / len) * mag
+              oy = (dx / len) * mag
+            }
+
+            if (run.length === 1) {
+              const s = run[0]
+              result.push({
+                key: `l-${line.id}-${runStart}`,
+                lineId: line.id,
+                color: line.color,
+                points: `${fmtPt(s.ax + ox, s.ay + oy)} ${fmtPt(s.bx + ox, s.by + oy)}`
+              })
+            } else {
+              const pts = [fmtPt(run[0].ax, run[0].ay)]
+              for (let j = 0; j < run.length - 1; j++) {
+                pts.push(fmtPt(run[j].bx + ox, run[j].by + oy))
+              }
+              pts.push(fmtPt(run[run.length - 1].bx, run[run.length - 1].by))
+              result.push({
+                key: `l-${line.id}-${runStart}`,
+                lineId: line.id,
+                color: line.color,
+                points: pts.join(' ')
+              })
+            }
+          }
+        } else {
+          // 非共线 run：居中绘制
+          const pts = [fmtPt(run[0].ax, run[0].ay)]
+          for (const s of run) pts.push(fmtPt(s.bx, s.by))
+          result.push({
+            key: `l-${line.id}-${runStart}`,
+            lineId: line.id,
+            color: line.color,
+            points: pts.join(' ')
+          })
+        }
+
+        runStart = i
+      }
+    }
+  }
+
+  return result
 })
 
 // 高亮路径中包含的站点集合（用于强调）
@@ -416,7 +547,9 @@ const stations = computed(() => {
   }
   return [...byName.values()].map(({ id, st, co, dupIds }) => {
     const lines = st.lines || []
-    const isTransfer = lines.length >= 2
+    // 换乘按「线路族」判定：同族支线（如龙华有轨电车两条支线）不算换乘，跨族才标。
+    const fams = new Set(lines.map(lineFamily))
+    const isTransfer = fams.size >= 2
     const isStart = dupIds.includes(props.startId)
     const isEnd = dupIds.includes(props.endId)
     const onRoute = dupIds.some(did => highlightStationSet.value.has(did))
@@ -558,7 +691,7 @@ const labelData = computed(() => {
 
     const near = make8(baseR)
     const mid  = make8(baseR * 1.8)
-    const far  = make8(baseR * 3.0)
+    const far  = make8(baseR * 2.3)
 
     // 换乘站：优先对角 → 再水平/垂直两侧，避免十字交叉线路上下左右都压线
     // 单线路站：水平线上下优先，垂直线左右优先
@@ -613,7 +746,7 @@ const labelData = computed(() => {
       if (ov.position) {
         // 方式 A：根据方向 + 距离档位自动计算偏移
         const baseR = visR(s) + gap
-        const distMul = ov.distance === 'mid' ? 1.8 : ov.distance === 'far' ? 3.0 : 1.0
+        const distMul = ov.distance === 'mid' ? 1.8 : ov.distance === 'far' ? 2.3 : 1.0
         const r = baseR * distMul
         const diag = r * 0.707
         const POS_MAP = {
