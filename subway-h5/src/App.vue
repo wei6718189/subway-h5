@@ -46,7 +46,7 @@
     <SubwayMap
       ref="mapRef"
       :city-data="cityData"
-      :highlight="route ? route.legs : []"
+      :highlight="highlightLegs"
       :start-id="startId"
       :end-id="endId"
       :loading="loading"
@@ -97,7 +97,13 @@
         @select-station="onPopupSelect"
       />
       <div class="route-scroll-container">
-        <RouteResult :route="route" :city-data="cityData" @clear="onClearRoute" />
+        <RouteResult
+          :routes="routePlans"
+          :active-key="activeKey"
+          :city-data="cityData"
+          @select="onSelectPlan"
+          @clear="onClearRoute"
+        />
       </div>
     </div>
   </div>
@@ -124,6 +130,32 @@ const loading = ref(false)
 const startId = ref('')
 const endId = ref('')
 const route = ref(null)
+const activeKey = ref('fastest')
+
+// 当前选中方案的乘车段，用于地图高亮
+const highlightLegs = computed(() => {
+  if (!route.value) return []
+  const plan = activeKey.value === 'leastTransfer' ? route.value.leastTransfer : route.value.fastest
+  return plan ? plan.legs : []
+})
+
+// 组装展示方案列表；若最少换乘与最快路线完全一致，则只展示最快
+const routePlans = computed(() => {
+  if (!route.value) return []
+  const plans = [{ key: 'fastest', label: '最快路线', route: route.value.fastest }]
+  const l = route.value.leastTransfer
+  if (l && !samePlan(route.value.fastest, l)) {
+    plans.push({ key: 'leastTransfer', label: '最少换乘', route: l })
+  }
+  return plans
+})
+
+function samePlan(a, b) {
+  if (!a || !b) return false
+  if (a.transferCount !== b.transferCount) return false
+  const seq = legs => legs.flatMap(leg => leg.stops).join('>')
+  return seq(a.legs) === seq(b.legs)
+}
 
 const mapRef = ref(null)
 const searchRef = ref(null)
@@ -357,13 +389,26 @@ function onPlan() {
     return
   }
   route.value = result
+  activeKey.value = 'fastest'
+  const plan = result.fastest
   const stationIds = []
-  for (const leg of result.legs) stationIds.push(...leg.stops)
+  for (const leg of plan.legs) stationIds.push(...leg.stops)
+  mapRef.value?.zoomToStations(stationIds)
+}
+
+function onSelectPlan(key) {
+  activeKey.value = key
+  if (!route.value) return
+  const plan = key === 'leastTransfer' ? route.value.leastTransfer : route.value.fastest
+  if (!plan) return
+  const stationIds = []
+  for (const leg of plan.legs) stationIds.push(...leg.stops)
   mapRef.value?.zoomToStations(stationIds)
 }
 
 function onClearRoute() {
   route.value = null
+  activeKey.value = 'fastest'
 }
 
 onCityChange('shenzhen')
