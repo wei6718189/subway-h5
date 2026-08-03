@@ -1,0 +1,155 @@
+// 抓取百度地图「地铁示意图」数据（qt=subways 接口）
+// 与 qt=bsi（真实地理坐标）不同，qt=subways 返回的是百度网页地铁图的示意图坐标：
+//   - <l> 线路带官方配色 lc（如 0x6FBD78）
+//   - <p> 站点带示意图坐标 x/y（画布坐标）以及真实墨卡托 px/py
+//   - <p> 的 ln 字段直接给出换乘关系（“城市|线路名,城市|线路名”）
+// 输出与现有渲染器完全兼容的 JSON（站点用 x/y，走 schematic 投影）。
+import fs from 'fs'
+import path from 'path'
+import { fileURLToPath } from 'url'
+import { execFileSync } from 'child_process'
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const ROOT = path.resolve(__dirname, '../../')
+const OUT_DIR = path.join(ROOT, 'public', 'data-baidu-schematic')
+
+// 百度城市代码（与 qt=bsi 同一套）
+const BAIDU_CITY_CODE = { shenzhen: 340, guangzhou: 257, nanning: 326 }
+
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+
+// 官方 lc 缺失时的兜底调色板
+const PALETTE = [
+  '#E4002B', '#0072CE', '#00A651', '#F39700', '#92278F', '#00A0E9',
+  '#A0C400', '#E5007F', '#8B5A2B', '#6FBD78', '#74BAD9', '#D66A62',
+  '#AB7BAD', '#7CC5B7', '#B2735A', '#F2C200', '#5C7CBA', '#C0A062',
+  '#8E44AD', '#16A085', '#C0392B', '#27AE60'
+]
+
+function fetchXml(url) {
+  return execFileSync('curl', ['-s', '-m', '25', '-A', UA, '-e', 'https://map.baidu.com/', url], {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024
+  })
+}
+
+function hexColor(lc) {
+  if (!lc) return null
+  return lc.replace(/^0x/i, '#').toUpperCase()
+}
+
+// 解析 ln 字段：“城市|线路名,城市|线路名” → [线路名, ...]
+function parseLineNames(lnRaw) {
+  if (!lnRaw) return []
+  return lnRaw
+    .split(',')
+    .map((s) => {
+      const i = s.indexOf('|')
+      return (i >= 0 ? s.slice(i + 1) : s).trim()
+    })
+    .filter(Boolean)
+}
+
+function parseLines(xml) {
+  const lines = []
+  const lineRe = /<l\s+([^>]*)>([\s\S]*?)<\/l>/g
+  let m
+  while ((m = lineRe.exec(xml))) {
+    const attrs = m[1]
+    const inner = m[2]
+    const lb = (attrs.match(/lb="([^"]*)"/) || [])[1]
+    const lc = (attrs.match(/lc="([^"]*)"/) || [])[1]
+    if (!lb) continue
+    const stops = []
+    const pRe = /<p\s+([^>]*)\/?>/g
+    let p
+    while ((p = pRe.exec(inner))) {
+      const pa = p[1]
+      const sid = (pa.match(/sid="([^"]*)"/) || [])[1]
+      const x = parseFloat((pa.match(/x="([^"]*)"/) || [])[1])
+      const y = parseFloat((pa.match(/y="([^"]*)"/) || [])[1])
+      const uid = (pa.match(/uid="([^"]*)"/) || [])[1]
+      const lnRaw = (pa.match(/ln="([^"]*)"/) || [])[1] || ''
+      if (!sid || Number.isNaN(x) || Number.isNaN(y)) continue
+      let linesOfStation = parseLineNames(lnRaw)
+      if (linesOfStation.length === 0) linesOfStation = [lb]
+      stops.push({ sid, x, y, uid, lines: linesOfStation })
+    }
+    lines.push({ name: lb, color: hexColor(lc), stops })
+  }
+  return lines
+}
+
+async function fetchCity(cityId, code) {
+  const url = `https://map.baidu.com/?qt=subways&c=${code}&t=${Date.now()}000`
+  const xml = fetchXml(url)
+  const rawLines = parseLines(xml)
+
+  const stations = {}
+  const coordToMain = {} // 坐标键 → 主 station id（用于合并换乘站）
+  const outLines = []
+  let colorIdx = 0
+
+  for (const rl of rawLines) {
+    const color = rl.color || PALETTE[colorIdx % PALETTE.length]
+    colorIdx++
+    const stationIds = []
+    for (const st of rl.stops) {
+      const key = `${st.x},${st.y}`
+      let mainId
+      if (coordToMain[key] != null) {
+        mainId = coordToMain[key]
+      } else {
+        mainId = st.uid || key
+        coordToMain[key] = mainId
+      }
+      if (!stations[mainId]) {
+        stations[mainId] = { id: mainId, name: st.sid, x: st.x, y: st.y, lines: new Set() }
+      }
+      st.lines.forEach((l) => stations[mainId].lines.add(l))
+      stationIds.push(mainId)
+    }
+    outLines.push({ id: rl.name, name: rl.name, color, stationIds })
+  }
+
+  const finalStations = {}
+  let transfer = 0
+  for (const [id, s] of Object.entries(stations)) {
+    const linesArr = [...s.lines]
+    finalStations[id] = {
+      id,
+      name: s.name,
+      x: s.x,
+      y: s.y,
+      lines: linesArr,
+      isTransfer: linesArr.length > 1
+    }
+    if (linesArr.length > 1) transfer++
+  }
+  return { lines: outLines, stations: finalStations, transfer }
+}
+
+async function main() {
+  fs.mkdirSync(OUT_DIR, { recursive: true })
+  for (const [cityId, code] of Object.entries(BAIDU_CITY_CODE)) {
+    if (cityId === 'nanning') {
+      console.log(`- ${cityId}: 百度无地铁数据，跳过`)
+      continue
+    }
+    try {
+      const data = await fetchCity(cityId, code)
+      const out = {
+        coordType: 'schematic-baidu',
+        source: 'baidu-subways',
+        lines: data.lines,
+        stations: data.stations
+      }
+      fs.writeFileSync(path.join(OUT_DIR, `${cityId}.json`), JSON.stringify(out, null, 2))
+      console.log(`✓ ${cityId}: ${data.lines.length} 线, ${Object.keys(data.stations).length} 站, ${data.transfer} 换乘`)
+    } catch (e) {
+      console.error(`✗ ${cityId} 失败:`, e.message)
+    }
+  }
+}
+
+main()

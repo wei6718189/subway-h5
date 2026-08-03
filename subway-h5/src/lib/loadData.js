@@ -7,21 +7,41 @@ export const CITIES = [
   { id: 'nanning', name: '南宁' }
 ]
 
+// 数据源（地图厂商）
+//  - amap:        高德地图「示意图」坐标（srhdata）         → 目录 public/data-amap
+//  - baidu:       百度地图「示意图」坐标（qt=subways，含官方配色）→ 目录 public/data-baidu-schematic
+//  - baidu-geo:   百度地图「真实地理」坐标（qt=bsi，BD-09 经纬度）  → 目录 public/data-baidu
+export const PROVIDERS = [
+  { id: 'baidu', name: '百度（示意图）' },
+  { id: 'amap', name: '高德（示意图）' },
+  { id: 'baidu-geo', name: '百度（真实坐标地理位置）' }
+]
+
+// 百度地图（qt=bsi）已抓取数据的城市。
+// 注：南宁在百度 bsi 接口暂无地铁数据（返回空），故百度版仅覆盖深圳/广州。
+export const BAIDU_CITIES = ['shenzhen', 'guangzhou']
+
 const cache = new Map()
 
 /**
  * 加载城市数据（带内存缓存）
  * @param {string} cityId
+ * @param {string} provider 'amap' | 'baidu'
  * @returns {Promise<object>}
  */
-export async function loadCity(cityId) {
-  if (cache.has(cityId)) return cache.get(cityId)
+export async function loadCity(cityId, provider = 'amap') {
+  const key = `${provider}:${cityId}`
+  if (cache.has(key)) return cache.get(key)
   // 相对路径，兼容对象存储子目录部署
-  const url = `./data/${cityId}.json`
+  const dir =
+    provider === 'baidu' ? 'data-baidu-schematic' :
+    provider === 'baidu-geo' ? 'data-baidu' :
+    'data-amap'
+  const url = `./${dir}/${cityId}.json`
   const res = await fetch(url)
   if (!res.ok) throw new Error(`加载城市数据失败: ${cityId} (${res.status})`)
   const data = await res.json()
-  cache.set(cityId, data)
+  cache.set(key, data)
   return data
 }
 

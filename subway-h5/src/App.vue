@@ -2,6 +2,14 @@
   <div class="app">
     <div class="topbar">
       <h1>地铁线路图</h1>
+      <div class="provider-switch" role="tablist" aria-label="数据源">
+        <button
+          v-for="p in providers"
+          :key="p.id"
+          :class="{ active: currentProvider === p.id }"
+          @click="onProviderChange(p.id)"
+        >{{ p.name }}</button>
+      </div>
       <CitySwitcher :current="currentCity" @update:current="onCityChange" />
       <!-- 线路图例 -->
       <div class="legend" v-if="cityData" ref="legendRef">
@@ -23,6 +31,8 @@
         </div>
       </div>
     </div>
+
+    <div class="notice" v-if="notice">{{ notice }}</div>
 
     <SubwayMap
       ref="mapRef"
@@ -90,10 +100,13 @@ import SubwayMap from './components/SubwayMap.vue'
 import StationSearch from './components/StationSearch.vue'
 import RouteResult from './components/RouteResult.vue'
 import CitySwitcher from './components/CitySwitcher.vue'
-import { loadCity } from './lib/loadData.js'
+import { loadCity, PROVIDERS, BAIDU_CITIES, CITIES } from './lib/loadData.js'
 import { planRoute } from './lib/graph.js'
 
 const currentCity = ref('shenzhen')
+const currentProvider = ref('amap')
+const providers = PROVIDERS
+const notice = ref('')
 const cityData = shallowRef(null)
 const loading = ref(false)
 const startId = ref('')
@@ -204,23 +217,50 @@ function deselectStation() {
   closePopup()
 }
 
+function cityName(id) {
+  return CITIES.find(c => c.id === id)?.name || id
+}
+
+// 按当前「城市 + 数据源」加载数据；百度无该城市数据时回退高德并提示
+async function loadCurrent() {
+  const cityId = currentCity.value
+  const provider = currentProvider.value
+  loading.value = true
+  closePopup()
+  try {
+    cityData.value = await loadCity(cityId, provider)
+    notice.value = ''
+  } catch (e) {
+    console.error(e)
+    if ((provider === 'baidu' || provider === 'baidu-geo') && !BAIDU_CITIES.includes(cityId)) {
+      notice.value = `百度地图暂未提供「${cityName(cityId)}」地铁数据，已切换回高德（示意图）`
+      currentProvider.value = 'amap'
+      cityData.value = await loadCity(cityId, 'amap')
+    } else {
+      cityData.value = null
+      alert(`加载 ${cityId} 数据失败：${e.message}\n请先运行 npm run prepare:${provider}:${cityId}`)
+    }
+  } finally {
+    loading.value = false
+  }
+}
+
 async function onCityChange(cityId) {
   if (cityId === currentCity.value && cityData.value) return
   currentCity.value = cityId
   route.value = null
   startId.value = ''
   endId.value = ''
-  loading.value = true
-  closePopup()
-  try {
-    cityData.value = await loadCity(cityId)
-  } catch (e) {
-    console.error(e)
-    cityData.value = null
-    alert(`加载 ${cityId} 数据失败：${e.message}\n请先运行 npm run prepare:data:${cityId}`)
-  } finally {
-    loading.value = false
-  }
+  await loadCurrent()
+}
+
+async function onProviderChange(p) {
+  if (p === currentProvider.value) return
+  currentProvider.value = p
+  route.value = null
+  startId.value = ''
+  endId.value = ''
+  await loadCurrent()
 }
 
 function onMapSelectStation(id, screenX, screenY) {
@@ -393,5 +433,35 @@ onCityChange('shenzhen')
   overflow-y: auto;
   max-height: calc(100vh - 300px);
   -webkit-overflow-scrolling: touch;
+}
+.provider-switch {
+  display: inline-flex;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.provider-switch button {
+  border: none;
+  background: transparent;
+  padding: 6px 13px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #555;
+  transition: background 0.15s, color 0.15s;
+}
+.provider-switch button.active {
+  background: #4a9eff;
+  color: #fff;
+  font-weight: 600;
+}
+.notice {
+  margin: 6px 10px;
+  padding: 8px 12px;
+  background: #fff7e6;
+  border: 1px solid #ffd591;
+  border-radius: 8px;
+  color: #ad6800;
+  font-size: 13px;
 }
 </style>

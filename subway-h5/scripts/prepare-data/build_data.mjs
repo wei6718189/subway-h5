@@ -1,4 +1,4 @@
-// 地铁数据准备脚本：从 OpenStreetMap Overpass API 抓取城市地铁线路+站点，生成 data/<city>.json
+// 地铁数据准备脚本：从 OpenStreetMap Overpass API 抓取城市地铁线路+站点，生成 data-amap/<city>.json
 // 本地运行（Node 18+，内置 fetch），不受浏览器 CORS 限制。
 // 用法: node scripts/prepare-data/build_data.mjs [cityId]   不传则生成全部城市
 //
@@ -11,7 +11,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const OUT_DIR = resolve(__dirname, '../../public/data')
+const OUT_DIR = resolve(__dirname, '../../public/data-amap')
 
 const CITIES = {
   shenzhen:   { name: '深圳', variants: ['深圳市', '深圳'], prefix: 'sz' },

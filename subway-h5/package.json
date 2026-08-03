@@ -13,6 +13,10 @@
     "prepare:data:gz": "node scripts/prepare-data/build_data.mjs guangzhou",
     "prepare:data:hk": "node scripts/prepare-data/build_data.mjs hongkong",
     "prepare:data:nn": "node scripts/prepare-data/build_data.mjs nanning",
+    "prepare:baidu": "node scripts/prepare-data/fetch_baidu.mjs",
+    "prepare:baidu-schematic": "node scripts/prepare-data/fetch_baidu_schematic.mjs",
+    "prepare:baidu:sz": "node scripts/prepare-data/fetch_baidu.mjs shenzhen",
+    "prepare:baidu:gz": "node scripts/prepare-data/fetch_baidu.mjs guangzhou",
     "icons": "node scripts/generate-icons.mjs"
   },
   "dependencies": {

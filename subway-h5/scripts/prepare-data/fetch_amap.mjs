@@ -1,4 +1,4 @@
-// 地铁数据准备脚本：从高德地铁示意图接口抓取三城数据，生成 data/<city>.json
+// 地铁数据准备脚本：从高德地铁示意图接口抓取三城数据，生成 data-amap/<city>.json
 // 高德返回的 p 字段是示意图坐标（人工优化的布局坐标），cl 是线路颜色，c/f 是线路路径 polyline 点。
 // 绘制效果与高德地铁图一致，站点布局清晰，线路平滑。
 // 本地运行（Node 18+，内置 fetch），一次性下载保存本地，运行时离线可用，无 CORS 问题。
@@ -9,7 +9,7 @@ import { resolve, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const OUT_DIR = resolve(__dirname, '../../public/data')
+const OUT_DIR = resolve(__dirname, '../../public/data-amap')
 
 // 高德城市代码（省级行政区划代码）+ 拼音
 const CITIES = {
