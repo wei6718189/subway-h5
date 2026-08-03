@@ -38,9 +38,9 @@ export async function loadCity(cityId, provider = 'amap') {
     provider === 'baidu-geo' ? 'data-baidu' :
     'data-amap'
   const url = `./${dir}/${cityId}.json`
-  // cache: 'no-cache' 让浏览器每次加载都向服务器做条件校验，
-  // 重新抓取（prepare:*）生成新数据后无需手动硬刷即可生效
-  const res = await fetch(url, { cache: 'no-cache' })
+  // cache: 'no-store' 强制浏览器永不缓存该 JSON（绕开此前 vite preview 给静态资源打的强缓存），
+  // 重新抓取（prepare:*）生成新数据后，任意刷新即可拿到最新数据
+  const res = await fetch(url, { cache: 'no-store' })
   if (!res.ok) throw new Error(`加载城市数据失败: ${cityId} (${res.status})`)
   const data = await res.json()
   cache.set(key, data)
