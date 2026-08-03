@@ -1,10 +1,4 @@
-html {
-  color-scheme: light;
-  background-color: #ffffff;
-}
-
 :root {
-  color-scheme: light;
   --bg: #ffffff;
   --panel: #f5f6f8;
   --panel-2: #ffffff;

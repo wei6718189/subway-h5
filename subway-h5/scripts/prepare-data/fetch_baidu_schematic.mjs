@@ -80,10 +80,18 @@ function parseLines(xml) {
   return lines
 }
 
+function isMetroLike(name) {
+  // 与高德口径对齐：保留地铁/APM/广佛/佛山地铁等城市轨道交通；
+  // 剔除有轨电车、城际铁路，避免与地铁线路重叠/缠绕（如深圳龙华有轨电车）。
+  if (/有轨电车/.test(name)) return false
+  if (/城际/.test(name)) return false
+  return true
+}
+
 async function fetchCity(cityId, code) {
   const url = `https://map.baidu.com/?qt=subways&c=${code}&t=${Date.now()}000`
   const xml = fetchXml(url)
-  const rawLines = parseLines(xml)
+  const rawLines = parseLines(xml).filter(l => isMetroLike(l.name))
 
   const stations = {}
   const nameToMain = {} // 站名（或坐标兜底）→ 主 station id（用于合并换乘站）
@@ -121,6 +129,7 @@ async function fetchCity(cityId, code) {
   const cityOverrides = LABEL_OVERRIDES[cityId] || {}
   for (const [id, s] of Object.entries(stations)) {
     const linesArr = [...s.lines]
+    if (linesArr.length === 0) continue // 过滤被有轨电车/城际独占的孤儿站
     const obj = {
       id,
       name: s.name,
