@@ -99,7 +99,10 @@ async function fetchCity(cityId, code) {
       const nameKey = st.sid && st.sid.trim() ? st.sid.trim() : `${st.x},${st.y}`
       let mainId = nameToMain[nameKey]
       if (mainId == null) {
-        mainId = st.uid || nameKey
+        // 用站名（或坐标兜底）作主 id，不要用 uid：百度个别站点会复用他人 uid，
+        // 例如 5 号线「桂湾」复用了「宝华」的 uid，用 uid 作 id 会把桂湾错误合并进宝华，
+        // 表现为桂湾丢失、宝华在 5 号线里被计两次。站名在深圳/广州全局唯一，适合做合并键与 id。
+        mainId = nameKey
         nameToMain[nameKey] = mainId
       }
       if (!stations[mainId]) {
