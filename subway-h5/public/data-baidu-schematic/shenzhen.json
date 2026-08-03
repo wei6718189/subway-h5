@@ -3268,7 +3268,7 @@
       ],
       "isTransfer": true,
       "labelOverride": {
-        "position": "br",
+        "position": "top",
         "distance": "near"
       }
     },
@@ -3282,7 +3282,7 @@
       ],
       "isTransfer": false,
       "labelOverride": {
-        "position": "right",
+        "position": "top",
         "distance": "near"
       }
     },
@@ -4118,7 +4118,7 @@
       ],
       "isTransfer": false,
       "labelOverride": {
-        "position": "top",
+        "position": "bl",
         "distance": "near"
       }
     },
