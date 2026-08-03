@@ -1111,20 +1111,43 @@ function resetView() {
   const W = proj.value.width || 1000
   const H = proj.value.height || 800
   const s = defaultScale()
-  scale.value = s
   // 以 viewBox 中心为基准缩放，保证地铁图默认居中显示
   // 推导：让 g 变换后中心点 (W/2, H/2) 仍位于容器中心
-  tx.value = (W / 2) * (1 - s)
-  ty.value = (H / 2) * (1 - s)
+  animateTo(s, (W / 2) * (1 - s), (H / 2) * (1 - s), 300)
 }
 
 watch(() => props.cityData, () => {
   resetView()
 })
 
-defineExpose({ resetView, zoomToStations })
+defineExpose({ resetView, zoomToStations, fitAll })
 
-function zoomToStations(stationIds) {
+// 平滑过渡到目标视图（缩放 + 平移），避免路线规划时地图瞬切
+let animFrame = null
+function animateTo(toScale, toTx, toTy, dur = 350) {
+  if (animFrame) cancelAnimationFrame(animFrame)
+  const fromScale = scale.value
+  const fromTx = tx.value
+  const fromTy = ty.value
+  if (dur <= 0) {
+    scale.value = toScale; tx.value = toTx; ty.value = toTy
+    return
+  }
+  const start = performance.now()
+  function step(now) {
+    const t = Math.min(1, (now - start) / dur)
+    const e = 1 - Math.pow(1 - t, 3) // easeOutCubic
+    scale.value = fromScale + (toScale - fromScale) * e
+    tx.value = fromTx + (toTx - fromTx) * e
+    ty.value = fromTy + (toTy - fromTy) * e
+    if (t < 1) animFrame = requestAnimationFrame(step)
+    else animFrame = null
+  }
+  animFrame = requestAnimationFrame(step)
+}
+
+// 缩放到让给定站点集合（路线高亮段）整体可见并居中
+function zoomToStations(stationIds, opts = {}) {
   const c = stationCoords.value
   const pts = stationIds.map(id => c[id]).filter(Boolean)
   if (!pts.length) return
@@ -1135,20 +1158,44 @@ function zoomToStations(stationIds) {
   }
   const w = Math.max(maxX - minX, 1)
   const h = Math.max(maxY - minY, 1)
-  const padding = 60
-  nextTick(() => {
-    const rect = svgRef.value.getBoundingClientRect()
-    const scaleMeet = Math.min(rect.width / proj.value.width, rect.height / proj.value.height)
-    const targetScale = clamp(
-      Math.min((rect.width - padding * 2) / w, (rect.height - padding * 2) / h) / scaleMeet,
-      0.5, 8
-    )
-    const cx = (minX + maxX) / 2
-    const cy = (minY + maxY) / 2
-    scale.value = targetScale
-    tx.value = (rect.width / 2 / scaleMeet - cx * targetScale)
-    ty.value = (rect.height / 2 / scaleMeet - cy * targetScale)
-  })
+  const W = proj.value.width || 1000
+  const H = proj.value.height || 800
+  const rect = svgRef.value?.getBoundingClientRect()
+  if (!rect || !rect.width || !rect.height) return
+  const rectW = rect.width
+  const rectH = rect.height
+  // 底部抽屉（路线面板）会遮住地图下半部分：用其完整高度减去收起露出高度(peek)，
+  // 得到展开态遮盖量。transform 平移不改变 offsetHeight，故不受展开动画中途影响。
+  let bottomInset = 0
+  const panel = document.querySelector('.bottom-panel')
+  if (panel) {
+    const peek = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--drawer-peek')) || 76
+    bottomInset = Math.max(0, Math.min(panel.offsetHeight - peek, rectH))
+  }
+  const visibleH = rectH - bottomInset
+  // 实际 viewBox→屏幕缩放系数：preserveAspectRatio 在瘦高屏用 slice（取 max），否则 meet（取 min）
+  const fitW = rectW / W
+  const fitH = rectH / H
+  const fit = preserveAspectRatio.value === 'xMidYMid slice' ? Math.max(fitW, fitH) : Math.min(fitW, fitH)
+  const padding = opts.padding != null ? opts.padding : 56
+  // 让路线在屏幕上占据 (visible - 2*padding) 区域；叠加在 fit 之上求所需 scale
+  const scaleX = (rectW - padding * 2) / (w * fit)
+  const scaleY = (visibleH - padding * 2) / (h * fit)
+  const targetScale = clamp(Math.min(scaleX, scaleY), 0.3, 8)
+  const cx = (minX + maxX) / 2
+  const cy = (minY + maxY) / 2
+  // 水平居中到 svg 中心；垂直居中到“可见区域中心”（避开底部抽屉遮挡）
+  const tx = W / 2 - targetScale * cx
+  const ty = H / 2 - targetScale * cy - bottomInset / (2 * fit)
+  animateTo(targetScale, tx, ty, opts.dur)
+}
+
+function fitAll() {
+  // 缩放到整张图（用于清除路线后复位）
+  const W = proj.value.width || 1000
+  const H = proj.value.height || 800
+  const s = defaultScale()
+  animateTo(s, (W / 2) * (1 - s), (H / 2) * (1 - s), 300)
 }
 
 onMounted(() => {
