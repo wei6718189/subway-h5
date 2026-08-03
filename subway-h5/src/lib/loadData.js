@@ -38,7 +38,9 @@ export async function loadCity(cityId, provider = 'amap') {
     provider === 'baidu-geo' ? 'data-baidu' :
     'data-amap'
   const url = `./${dir}/${cityId}.json`
-  const res = await fetch(url)
+  // cache: 'no-cache' 让浏览器每次加载都向服务器做条件校验，
+  // 重新抓取（prepare:*）生成新数据后无需手动硬刷即可生效
+  const res = await fetch(url, { cache: 'no-cache' })
   if (!res.ok) throw new Error(`加载城市数据失败: ${cityId} (${res.status})`)
   const data = await res.json()
   cache.set(key, data)
