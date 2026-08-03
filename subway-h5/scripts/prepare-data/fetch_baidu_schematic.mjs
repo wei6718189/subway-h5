@@ -38,18 +38,7 @@ function hexColor(lc) {
   return lc.replace(/^0x/i, '#').toUpperCase()
 }
 
-// 解析 ln 字段：“城市|线路名,城市|线路名” → [线路名, ...]
-function parseLineNames(lnRaw) {
-  if (!lnRaw) return []
-  return lnRaw
-    .split(',')
-    .map((s) => {
-      const i = s.indexOf('|')
-      return (i >= 0 ? s.slice(i + 1) : s).trim()
-    })
-    .filter(Boolean)
-}
-
+// 解析线路与站点（线路归属在 fetchCity 中按真实 line.id 注入，不依赖 ln 字段原始名）
 function parseLines(xml) {
   const lines = []
   const lineRe = /<l\s+([^>]*)>([\s\S]*?)<\/l>/g
@@ -69,11 +58,8 @@ function parseLines(xml) {
       const x = parseFloat((pa.match(/x="([^"]*)"/) || [])[1])
       const y = parseFloat((pa.match(/y="([^"]*)"/) || [])[1])
       const uid = (pa.match(/uid="([^"]*)"/) || [])[1]
-      const lnRaw = (pa.match(/ln="([^"]*)"/) || [])[1] || ''
       if (!sid || Number.isNaN(x) || Number.isNaN(y)) continue
-      let linesOfStation = parseLineNames(lnRaw)
-      if (linesOfStation.length === 0) linesOfStation = [lb]
-      stops.push({ sid, x, y, uid, lines: linesOfStation })
+      stops.push({ sid, x, y, uid })
     }
     lines.push({ name: lb, color: hexColor(lc), stops })
   }
@@ -86,7 +72,7 @@ async function fetchCity(cityId, code) {
   const rawLines = parseLines(xml)
 
   const stations = {}
-  const coordToMain = {} // 坐标键 → 主 station id（用于合并换乘站）
+  const nameToMain = {} // 站名（或坐标兜底）→ 主 station id（用于合并换乘站）
   const outLines = []
   let colorIdx = 0
 
@@ -95,18 +81,19 @@ async function fetchCity(cityId, code) {
     colorIdx++
     const stationIds = []
     for (const st of rl.stops) {
-      const key = `${st.x},${st.y}`
-      let mainId
-      if (coordToMain[key] != null) {
-        mainId = coordToMain[key]
-      } else {
-        mainId = st.uid || key
-        coordToMain[key] = mainId
+      // 合并键优先用站名（与高德一致，能容忍不同线路上坐标偏差）；无名时退回坐标
+      const nameKey = st.sid && st.sid.trim() ? st.sid.trim() : `${st.x},${st.y}`
+      let mainId = nameToMain[nameKey]
+      if (mainId == null) {
+        mainId = st.uid || nameKey
+        nameToMain[nameKey] = mainId
       }
       if (!stations[mainId]) {
         stations[mainId] = { id: mainId, name: st.sid, x: st.x, y: st.y, lines: new Set() }
       }
-      st.lines.forEach((l) => stations[mainId].lines.add(l))
+      // 关键：用线路的【真实 id】(rl.name) 作为归属线路，必须与 ride 边里的 line.id 完全一致，
+      // 否则换乘边会指向一个不存在的线路节点（之前用 ln 字段原始名"地铁12号线"导致 71/76 换乘断裂）
+      stations[mainId].lines.add(rl.name)
       stationIds.push(mainId)
     }
     outLines.push({ id: rl.name, name: rl.name, color, stationIds })
