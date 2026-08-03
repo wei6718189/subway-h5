@@ -22,10 +22,12 @@ const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 // 与高德数据格式保持一致：{ position: 'top'|'bot'|'left'|'right'|'tl'|'tr'|'bl'|'br', distance: 'near'|'mid'|'far' }
 const LABEL_OVERRIDES = {
   shenzhen: {
-    '桥头西': { position: 'top', distance: 'near' },
+    '桥头西': { position: 'bot', distance: 'near' },
     '福海西': { position: 'top', distance: 'near' },
     '国展南': { position: 'bl', distance: 'near' },
-    '沙井西': { position: 'bot', distance: 'near' }
+    '沙井西': { position: 'bot', distance: 'near' },
+    '福永': { position: 'right', distance: 'near' },
+    '桥头': { position: 'right', distance: 'near' }
   },
   guangzhou: {}
 }

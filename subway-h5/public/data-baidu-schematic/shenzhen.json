@@ -3089,7 +3089,11 @@
       "lines": [
         "11号线"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "d4e8cf871935dbd9fd0eb018": {
       "id": "d4e8cf871935dbd9fd0eb018",
@@ -3100,7 +3104,11 @@
         "11号线",
         "12号线(南宝线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "7fa89bfbd69398f5b65f1e1b": {
       "id": "7fa89bfbd69398f5b65f1e1b",
@@ -3282,7 +3290,7 @@
       ],
       "isTransfer": false,
       "labelOverride": {
-        "position": "top",
+        "position": "bot",
         "distance": "near"
       }
     },
