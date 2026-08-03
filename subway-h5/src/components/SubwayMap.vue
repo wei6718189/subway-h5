@@ -215,39 +215,48 @@ const stationCoords = computed(() => {
   return map
 })
 
-// 共线区间：把同一段两站之间被多条线路共用的区间找出来，用于平行错开绘制
-const segmentShares = computed(() => {
-  if (!props.cityData) return new Map()
-  const shares = new Map()
+// 几何重合走廊：把「投影后端点完全重合」的线路段归为一组
+// 不分站点 ID —— 只要两条线在某一段画在同一条轨迹上（哪怕站点序列不同）就算共线
+const corridorShares = computed(() => {
+  if (!props.cityData) return { geo: new Map(), segsByLine: new Map() }
+  const c = stationCoords.value
+  const geo = new Map()        // geoKey -> Set(lineId)
+  const segsByLine = new Map() // lineId -> [{i, ax,ay,bx,by, geoKey}]
+  const keyOf = (ax, ay, bx, by) => {
+    // 顺序无关，避免两条线反向经过同一段时 key 不同
+    let x1 = ax, y1 = ay, x2 = bx, y2 = by
+    if (x1 > x2 || (x1 === x2 && y1 > y2)) { [x1, x2] = [x2, x1]; [y1, y2] = [y2, y1] }
+    return `${Math.round(x1)},${Math.round(y1)}_${Math.round(x2)},${Math.round(y2)}`
+  }
   for (const line of props.cityData.lines || []) {
     const ids = line.stationIds || []
+    const items = []
     for (let i = 0; i < ids.length - 1; i++) {
-      const a = ids[i], b = ids[i + 1]
-      const key = a < b ? `${a}~${b}` : `${b}~${a}`
-      if (!shares.has(key)) shares.set(key, [])
-      shares.get(key).push(line.id)
+      const ca = c[ids[i]], cb = c[ids[i + 1]]
+      if (!ca || !cb) continue
+      const k = keyOf(ca.x, ca.y, cb.x, cb.y)
+      items.push({ i, ax: ca.x, ay: ca.y, bx: cb.x, by: cb.y, geoKey: k })
+      if (!geo.has(k)) geo.set(k, new Set())
+      geo.get(k).add(line.id)
     }
+    segsByLine.set(line.id, items)
   }
-  // 去重并按 line.id 排序，保证同一区间各线的左右顺序稳定
-  for (const [key, arr] of shares) {
-    shares.set(key, [...new Set(arr)].sort())
-  }
-  return shares
+  return { geo, segsByLine }
 })
 
 function fmtPt(x, y) {
   return `${x.toFixed(2)},${y.toFixed(2)}`
 }
 
-// 线路绘制：支持共线区间平行错开
+// 线路绘制：共线走廊并行错开
 // 规则：
 // 1) 有 line.path 的线路（高德）保持原样一条 polyline；
-// 2) 无 path 的线路按站点分段；若某段被多条线路共用，则按垂直方向错开并排；
+// 2) 无 path 的线路按站点分段；若某段落在「多条线重合的几何走廊」上，则按垂直方向错开并排；
 // 3) 连续共线段做成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
 const lineSegPolys = computed(() => {
   if (!props.cityData) return []
   const c = stationCoords.value
-  const shares = segmentShares.value
+  const { geo, segsByLine } = corridorShares.value
   const gap = baseLineWidth.value * 1.25
   const result = []
 
@@ -264,19 +273,14 @@ const lineSegPolys = computed(() => {
       continue
     }
 
-    const ids = line.stationIds || []
-    if (ids.length < 2) continue
+    const items = segsByLine.get(line.id) || []
+    if (!items.length) continue
 
-    // 构建本线各段信息
-    const segs = []
-    for (let i = 0; i < ids.length - 1; i++) {
-      const a = c[ids[i]], b = c[ids[i + 1]]
-      if (!a || !b) continue
-      const key = ids[i] < ids[i + 1] ? `${ids[i]}~${ids[i + 1]}` : `${ids[i + 1]}~${ids[i]}`
-      const shared = shares.get(key) || [line.id]
-      const sharedKey = shared.length > 1 ? shared.join('|') : ''
-      segs.push({ a, b, key, shared, sharedKey })
-    }
+    // 预计算每个 segment 的共享线集合（按 geoKey）
+    const segs = items.map(it => {
+      const shared = [...(geo.get(it.geoKey) || new Set())].sort()
+      return { ...it, shared, sharedKey: shared.length > 1 ? shared.join('|') : '' }
+    })
 
     // 按 sharedKey 把连续段聚成 run
     let runStart = 0
@@ -292,9 +296,10 @@ const lineSegPolys = computed(() => {
           const idx = shared.indexOf(line.id)
           const mag = (idx - (shared.length - 1) / 2) * gap
 
-          // 用 run 的累计方向算垂直方向
+          // 用 run 的累计方向算垂直方向（统一 canonical，保证同走廊两侧一致）
           let dx = 0, dy = 0
-          for (const s of run) { dx += s.b.x - s.a.x; dy += s.b.y - s.a.y }
+          for (const s of run) { dx += s.bx - s.ax; dy += s.by - s.ay }
+          if (dx < 0 || (dx === 0 && dy < 0)) { dx = -dx; dy = -dy }
           const len = Math.hypot(dx, dy)
           let ox = 0, oy = 0
           if (len > 0) {
@@ -309,15 +314,15 @@ const lineSegPolys = computed(() => {
               key: `l-${line.id}-${runStart}`,
               lineId: line.id,
               color: line.color,
-              points: `${fmtPt(s.a.x + ox, s.a.y + oy)} ${fmtPt(s.b.x + ox, s.b.y + oy)}`
+              points: `${fmtPt(s.ax + ox, s.ay + oy)} ${fmtPt(s.bx + ox, s.by + oy)}`
             })
           } else {
             // 连续共线：端点站居中，中间站统一偏移，形成干净平行线
-            const pts = [fmtPt(run[0].a.x, run[0].a.y)]
+            const pts = [fmtPt(run[0].ax, run[0].ay)]
             for (let j = 0; j < run.length - 1; j++) {
-              pts.push(fmtPt(run[j].b.x + ox, run[j].b.y + oy))
+              pts.push(fmtPt(run[j].bx + ox, run[j].by + oy))
             }
-            pts.push(fmtPt(run[run.length - 1].b.x, run[run.length - 1].b.y))
+            pts.push(fmtPt(run[run.length - 1].bx, run[run.length - 1].by))
             result.push({
               key: `l-${line.id}-${runStart}`,
               lineId: line.id,
@@ -327,8 +332,8 @@ const lineSegPolys = computed(() => {
           }
         } else {
           // 非共线 run：居中绘制
-          const pts = [fmtPt(run[0].a.x, run[0].a.y)]
-          for (const s of run) pts.push(fmtPt(s.b.x, s.b.y))
+          const pts = [fmtPt(run[0].ax, run[0].ay)]
+          for (const s of run) pts.push(fmtPt(s.bx, s.by))
           result.push({
             key: `l-${line.id}-${runStart}`,
             lineId: line.id,
