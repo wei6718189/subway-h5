@@ -89,7 +89,7 @@ input {
   background: #ffffff;
   /* 顶栏/底栏已钉住，中间地图区域留出对应安全距离，不会被遮挡 */
   padding-top: calc(var(--safe-top) + 52px);
-  padding-bottom: calc(var(--safe-bottom) + 200px);
+  padding-bottom: calc(var(--safe-bottom) + 185px);
 }
 
 svg.map {
@@ -343,8 +343,8 @@ svg.map {
 .zoom-ctrl {
   position: fixed;
   right: 10px;
-  /* 固定在底栏上方不被挡住：底栏 min 180px + 安全区 + 10px 间隔 */
-  bottom: calc(var(--safe-bottom) + 200px);
+  /* 固定在底栏上方不被挡住：底栏 + 安全区 + 10px 间隔 */
+  bottom: calc(var(--safe-bottom) + 185px);
   display: flex;
   flex-direction: column;
   gap: 6px;

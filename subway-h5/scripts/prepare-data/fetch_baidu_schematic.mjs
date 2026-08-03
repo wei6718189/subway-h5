@@ -48,7 +48,81 @@ const LABEL_OVERRIDES = {
     '上屋': { position: 'bot', distance: 'near' },
     '前湾': { position: 'top', distance: 'near' },
     '大运': { position: 'top', distance: 'near' },
-    '清湖': { position: 'top', distance: 'near' }
+    '清湖': { position: 'top', distance: 'near' },
+    // —— 第三批调整 ——
+    '深圳北站': { position: 'top', distance: 'near' },
+    '泥岗': { position: 'top', distance: 'near' },
+    '坪山中心': { position: 'top', distance: 'near' },
+    '岗头': { position: 'top', distance: 'near' },
+    '大剧院': { position: 'bot', distance: 'near' },
+    '黄贝岭': { position: 'bot', distance: 'near' },
+    '坪山围': { position: 'bot', distance: 'near' },
+    '上沙': { position: 'bot', distance: 'near' },
+    '鹿丹村': { position: 'bot', distance: 'near' },
+    '东门': { position: 'tl', distance: 'near' },
+    '灵芝': { position: 'right', distance: 'near' },
+    '鲤鱼门': { position: 'left', distance: 'near' },
+    // —— 第四批调整（观澜区域）——
+    '河西': { position: 'right', distance: 'near' },
+    '大布头': { position: 'right', distance: 'near' },
+    '观澜': { position: 'left', distance: 'near' },
+    // —— 第五批调整 ——
+    '锦鲤': { position: 'right', distance: 'near' },
+    '梅龙北': { position: 'right', distance: 'near' },
+    '大和': { position: 'left', distance: 'near' },
+    '沙头角': { position: 'bot', distance: 'near' },
+    '新澜': { position: 'top', distance: 'near' },
+    '河东': { position: 'top', distance: 'near' },
+    '清湖学校': { position: 'bot', distance: 'near' },
+    '石角头': { position: 'bot', distance: 'near' },
+    // —— 第六批调整 ——
+    '荷坳': { position: 'right', distance: 'near' },
+    '永湖': { position: 'right', distance: 'near' },
+    '横岗': { position: 'right', distance: 'near' },
+    '宝安中心': { position: 'right', distance: 'near' },
+    '龙城广场': { position: 'left', distance: 'near' },
+    '南油西': { position: 'bot', distance: 'near' },
+    '八卦岭': { position: 'top', distance: 'near' },
+    '华强北': { position: 'tr', distance: 'near' },
+    // —— 第七批调整 ——
+    '大芬': { position: 'right', distance: 'near' },
+    '观城': { position: 'right', distance: 'near' },
+    '木棉湾': { position: 'br', distance: 'near' },
+    // —— 第八批调整 ——
+    '晒布': { position: 'right', distance: 'near' },
+    '燕南': { position: 'bot', distance: 'near' },
+    '香蜜湖': { position: 'top', distance: 'near' },
+    // —— 第九批调整 ——
+    '华强路': { position: 'top', distance: 'near' },
+    '侨香': { position: 'top', distance: 'near' },
+    '安托山': { position: 'left', distance: 'near' }
+  },
+  guangzhou: {}
+}
+
+// 按「城市 → 线路名」强制覆盖线路色（优先于百度返回的 lc）
+// 用于对齐深圳地铁官方图例配色
+const COLOR_OVERRIDES = {
+  shenzhen: {
+    '1号线(罗宝线)': '#4FAA5E',
+    '2号线(8号线)': '#AC5F32',
+    '3号线(龙岗线)': '#49A5D9',
+    '4号线(龙华线)': '#C1402A',
+    '5号线(环中线)': '#895697',
+    '6号线': '#5BB4AE',
+    '6号线支线': '#3D8781',
+    '7号线(西丽线)': '#184394',
+    '9号线(梅林线)': '#846F73',
+    '10号线': '#D67B98',
+    '11号线': '#663149',
+    '12号线(南宝线)': '#A194AD',
+    '13号线(石岩线)': '#C4893B',
+    '14号线': '#E2CC7C',
+    '16号线': '#3A368B',
+    '20号线': '#A4D1D9',
+    '坪山云巴1号线': '#B4B4B4',
+    '龙华有轨电车(新澜-清湖)': '#B4B4B4',
+    '龙华有轨电车(清湖-下围)': '#B4B4B4'
   },
   guangzhou: {}
 }
@@ -124,8 +198,9 @@ async function fetchCity(cityId, code) {
   const outLines = []
   let colorIdx = 0
 
+  const cityColorOverrides = COLOR_OVERRIDES[cityId] || {}
   for (const rl of rawLines) {
-    const color = rl.color || PALETTE[colorIdx % PALETTE.length]
+    const color = cityColorOverrides[rl.name] || rl.color || PALETTE[colorIdx % PALETTE.length]
     colorIdx++
     const stationIds = []
     for (const st of rl.stops) {

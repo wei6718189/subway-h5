@@ -4,7 +4,7 @@
       class="map"
       ref="svgRef"
       :viewBox="`0 0 ${proj.width} ${proj.height}`"
-      preserveAspectRatio="xMidYMid meet"
+      :preserveAspectRatio="preserveAspectRatio"
       @wheel.prevent="onWheel"
       @click="onSvgClick"
       @pointerdown="onPointerDown"
@@ -167,6 +167,17 @@ const fitScale = computed(() => {
   return Math.min(width / vbW, height / vbH)
 })
 
+// 容器比 viewBox 更“瘦高”时，用 slice 让地图铺满高度，避免 iPhone 等 tall 屏幕出现大块白边
+const preserveAspectRatio = computed(() => {
+  const vbW = proj.value.width || 1000
+  const vbH = proj.value.height || 800
+  const { width, height } = svgRect.value
+  if (!width || !height) return 'xMidYMid meet'
+  const containerRatio = width / height
+  const viewBoxRatio = vbW / vbH
+  return containerRatio < viewBoxRatio ? 'xMidYMid slice' : 'xMidYMid meet'
+})
+
 // 自适应基础尺寸：使用平方根补偿（部分补偿 fitScale）
 // 完全补偿（/fitScale）会导致手机端 SVG 坐标系中值过大，文字比站间距还宽
 // 平方根补偿（/sqrt(fitScale)）在手机端折中：屏幕值略小但 SVG 比例合理
@@ -215,19 +226,34 @@ const stationCoords = computed(() => {
   return map
 })
 
-// 几何重合走廊：把「投影后端点完全重合」的线路段归为一组
-// 不分站点 ID —— 只要两条线在某一段画在同一条轨迹上（哪怕站点序列不同）就算共线
+// 几何重合走廊：基于「精确 segment 端点匹配」+「单线多段共线子路径合并」
+// 1) 精确 segment 两端点完全重合 -> 同一 corridors（最稳，不会误伤平行/交叉线）
+// 2) 一条线的「最大共线 run」内任意子路径（如 大剧院-湖贝，是 5号线 大剧院-黄贝岭 的子路径）
+//    只要两端点坐标与另一条线某段/某子路径一致，也并入同一 corridors。
+//    仍要求严格共线（三点垂直偏差/|AB|<=0.15），故 V 字臂、平行线、交叉线不会被误判。
 const corridorShares = computed(() => {
   if (!props.cityData) return { geo: new Map(), segsByLine: new Map() }
   const c = stationCoords.value
   const geo = new Map()        // geoKey -> Set(lineId)
-  const segsByLine = new Map() // lineId -> [{i, ax,ay,bx,by, geoKey}]
+  const segsByLine = new Map() // lineId -> [{i, ax,ay,bx,by, geoKey, shared, sharedKey}]
+
   const keyOf = (ax, ay, bx, by) => {
     // 顺序无关，避免两条线反向经过同一段时 key 不同
     let x1 = ax, y1 = ay, x2 = bx, y2 = by
     if (x1 > x2 || (x1 === x2 && y1 > y2)) { [x1, x2] = [x2, x1]; [y1, y2] = [y2, y1] }
     return `${Math.round(x1)},${Math.round(y1)}_${Math.round(x2)},${Math.round(y2)}`
   }
+  // 三点近似共线：C 到 AB 的垂直距离 / |AB| <= 0.15
+  function collinear(aId, bId, ccId) {
+    const a = c[aId], b = c[bId], cc = c[ccId]
+    if (!a || !b || !cc) return false
+    const dx = b.x - a.x, dy = b.y - a.y
+    const len2 = dx * dx + dy * dy
+    if (len2 === 0) return false
+    const cross = Math.abs((cc.x - a.x) * dy - (cc.y - a.y) * dx)
+    return cross / len2 <= 0.15
+  }
+
   for (const line of props.cityData.lines || []) {
     const ids = line.stationIds || []
     const items = []
@@ -239,7 +265,52 @@ const corridorShares = computed(() => {
       if (!geo.has(k)) geo.set(k, new Set())
       geo.get(k).add(line.id)
     }
-    segsByLine.set(line.id, items)
+    // 计算该线「最大共线 run」（站序号区间）
+    const runs = []
+    let start = 0
+    for (let i = 2; i < ids.length; i++) {
+      if (!collinear(ids[i - 2], ids[i - 1], ids[i])) {
+        runs.push([start, i - 1])
+        start = i - 1
+      }
+    }
+    if (ids.length - 1 - start >= 1) runs.push([start, ids.length - 1])
+    // 为每条 maximal run 生成「所有子路径端点 key」写入 geo（含整段与任意子段）
+    // 这样 5号线 大剧院-黄贝岭 的子路径 大剧院-湖贝 会与 2号线 大剧院-湖贝 命中同一 key
+    const runSubKeys = []
+    for (const [rs, re] of runs) {
+      const keys = []
+      for (let p = rs; p < re; p++) {
+        for (let q = p + 1; q <= re; q++) {
+          const ca = c[ids[p]], cb = c[ids[q]]
+          if (!ca || !cb) continue
+          const rk = keyOf(ca.x, ca.y, cb.x, cb.y)
+          if (!geo.has(rk)) geo.set(rk, new Set())
+          geo.get(rk).add(line.id)
+          keys.push(rk)
+        }
+      }
+      runSubKeys.push(keys)
+    }
+    // 每个 segment 的 shared：自身 geoKey 集合 ∪ 所有包含它的 run 的子路径 key 集合
+    const segShared = items.map(it => {
+      const set = new Set(geo.get(it.geoKey) || [])
+      for (let r = 0; r < runs.length; r++) {
+        const [rs, re] = runs[r]
+        if (it.i >= rs && it.i <= re - 1) {
+          for (const rk of runSubKeys[r]) {
+            const g = geo.get(rk)
+            if (g) g.forEach(id => set.add(id))
+          }
+        }
+      }
+      return set
+    })
+    const finalItems = items.map((it, idx) => {
+      const shared = [...segShared[idx]].sort()
+      return { ...it, shared, sharedKey: segShared[idx].size > 1 ? shared.join('|') : '' }
+    })
+    segsByLine.set(line.id, finalItems)
   }
   return { geo, segsByLine }
 })
@@ -257,6 +328,14 @@ function lineFamily(id) {
 // 线路绘制：共线走廊处理
 // 规则：
 // 1) 有 line.path 的线路（高德）保持原样一条 polyline；
+// 2) 无 path 的线路按「共线 run」分组；
+// 3) 若某 run 落在「多条线重合的几何走廊」上：
+//    - 同族（如龙华有轨电车两条支线）→ 只画一次，居中；
+//    - 跨族（如 2 号线与 5 号线）→ 按垂直方向错开并排；
+// 4) 连续共线 run 组成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
+// 线路绘制：共线走廊处理（基于 corridorShares 的精确 segment / 多段共线合并结果）
+// 规则：
+// 1) 有 line.path 的线路（高德）保持原样一条 polyline；
 // 2) 无 path 的线路按站点分段；
 // 3) 若某段落在「多条线重合的几何走廊」上：
 //    - 同族（如龙华有轨电车两条支线）→ 只画一次，居中；
@@ -265,7 +344,7 @@ function lineFamily(id) {
 const lineSegPolys = computed(() => {
   if (!props.cityData) return []
   const c = stationCoords.value
-  const { geo, segsByLine } = corridorShares.value
+  const { segsByLine } = corridorShares.value
   const gap = baseLineWidth.value * 1.25
   const result = []
 
@@ -282,14 +361,8 @@ const lineSegPolys = computed(() => {
       continue
     }
 
-    const items = segsByLine.get(line.id) || []
-    if (!items.length) continue
-
-    // 预计算每个 segment 的共享线集合（按 geoKey）
-    const segs = items.map(it => {
-      const shared = [...(geo.get(it.geoKey) || new Set())].sort()
-      return { ...it, shared, sharedKey: shared.length > 1 ? shared.join('|') : '' }
-    })
+    const segs = segsByLine.get(line.id) || []
+    if (!segs.length) continue
 
     // 按 sharedKey 把连续段聚成 run
     let runStart = 0
@@ -1020,17 +1093,29 @@ function zoomBy(factor) {
 
 function clamp(v, min, max) { return Math.max(min, Math.min(max, v)) }
 
-// 默认缩放：4 让地铁图初始显示更大一些，便于查看站点
-const DEFAULT_SCALE = 4
+// 默认缩放：宽屏（meet）用 4；瘦高屏（slice）本身已放大，用 2.5 避免裁得过多
+const DEFAULT_SCALE_WIDE = 4
+const DEFAULT_SCALE_TALL = 2.5
+
+function defaultScale() {
+  const W = proj.value.width || 1000
+  const H = proj.value.height || 800
+  const { width, height } = svgRect.value
+  if (!width || !height) return DEFAULT_SCALE_WIDE
+  const containerRatio = width / height
+  const viewBoxRatio = W / H
+  return containerRatio < viewBoxRatio ? DEFAULT_SCALE_TALL : DEFAULT_SCALE_WIDE
+}
 
 function resetView() {
   const W = proj.value.width || 1000
   const H = proj.value.height || 800
-  scale.value = DEFAULT_SCALE
+  const s = defaultScale()
+  scale.value = s
   // 以 viewBox 中心为基准缩放，保证地铁图默认居中显示
   // 推导：让 g 变换后中心点 (W/2, H/2) 仍位于容器中心
-  tx.value = (W / 2) * (1 - DEFAULT_SCALE)
-  ty.value = (H / 2) * (1 - DEFAULT_SCALE)
+  tx.value = (W / 2) * (1 - s)
+  ty.value = (H / 2) * (1 - s)
 }
 
 watch(() => props.cityData, () => {
