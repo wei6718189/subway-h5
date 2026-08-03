@@ -2,13 +2,22 @@
   <div class="app">
     <div class="topbar">
       <h1>地铁线路图</h1>
-      <div class="provider-switch" role="tablist" aria-label="数据源">
-        <button
-          v-for="p in providers"
-          :key="p.id"
-          :class="{ active: currentProvider === p.id }"
-          @click="onProviderChange(p.id)"
-        >{{ p.name }}</button>
+      <div class="provider-select" ref="providerRef">
+        <div class="provider-toggle" @click.stop="toggleProvider">
+          <span>{{ currentProviderName }}</span>
+          <span class="provider-arrow">{{ providerOpen ? '▼' : '▶' }}</span>
+        </div>
+        <div class="provider-body" v-if="providerOpen">
+          <div
+            v-for="p in providers"
+            :key="p.id"
+            class="provider-item"
+            :class="{ active: currentProvider === p.id }"
+            @click.stop="onProviderChange(p.id)"
+          >
+            {{ p.name }}
+          </div>
+        </div>
       </div>
       <CitySwitcher :current="currentCity" @update:current="onCityChange" />
       <!-- 线路图例 -->
@@ -95,7 +104,7 @@
 </template>
 
 <script setup>
-import { ref, shallowRef, onMounted, onBeforeUnmount } from 'vue'
+import { ref, shallowRef, onMounted, onBeforeUnmount, computed } from 'vue'
 import SubwayMap from './components/SubwayMap.vue'
 import StationSearch from './components/StationSearch.vue'
 import RouteResult from './components/RouteResult.vue'
@@ -106,6 +115,9 @@ import { planRoute } from './lib/graph.js'
 const currentCity = ref('shenzhen')
 const currentProvider = ref('amap')
 const providers = PROVIDERS
+const currentProviderName = computed(() => providers.find(p => p.id === currentProvider.value)?.name || '')
+const providerRef = ref(null)
+const providerOpen = ref(false)
 const notice = ref('')
 const cityData = shallowRef(null)
 const loading = ref(false)
@@ -131,6 +143,17 @@ function onLegendClickLine(lineId) {
   } else {
     highlightLineId.value = lineId
   }
+}
+
+// 数据源下拉
+function toggleProvider() {
+  providerOpen.value = !providerOpen.value
+}
+
+function onDocClickProvider(e) {
+  if (!providerRef.value) return
+  if (providerRef.value.contains(e.target)) return
+  providerOpen.value = false
 }
 
 // 点击图例下拉框以外：
@@ -187,11 +210,13 @@ function onGlobalClick(e) {
 onMounted(() => {
   document.addEventListener('click', onGlobalClick, true)
   document.addEventListener('click', onDocClickLegend, true)
+  document.addEventListener('click', onDocClickProvider, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onGlobalClick, true)
   document.removeEventListener('click', onDocClickLegend, true)
+  document.removeEventListener('click', onDocClickProvider, true)
 })
 
 function setAsStart() {
@@ -255,6 +280,7 @@ async function onCityChange(cityId) {
 }
 
 async function onProviderChange(p) {
+  providerOpen.value = false
   if (p === currentProvider.value) return
   currentProvider.value = p
   route.value = null
@@ -434,25 +460,58 @@ onCityChange('shenzhen')
   max-height: calc(100vh - 300px);
   -webkit-overflow-scrolling: touch;
 }
-.provider-switch {
-  display: inline-flex;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+.provider-select {
+  position: relative;
+  flex-shrink: 0;
+}
+.provider-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
   border-radius: 8px;
-  overflow: hidden;
-  background: #fff;
-}
-.provider-switch button {
-  border: none;
-  background: transparent;
-  padding: 6px 13px;
-  font-size: 13px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
   cursor: pointer;
-  color: #555;
-  transition: background 0.15s, color 0.15s;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  user-select: none;
+  white-space: nowrap;
 }
-.provider-switch button.active {
-  background: #4a9eff;
-  color: #fff;
+.provider-arrow {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.provider-body {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  min-width: 160px;
+  max-height: 50vh;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 4px;
+  z-index: 50;
+}
+.provider-item {
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 13px;
+  color: var(--text);
+}
+.provider-item:hover {
+  background: #eef0f3;
+}
+.provider-item.active {
+  background: #e8f0fe;
+  color: #1a73e8;
   font-weight: 600;
 }
 .notice {
