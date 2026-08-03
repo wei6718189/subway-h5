@@ -248,11 +248,20 @@ function fmtPt(x, y) {
   return `${x.toFixed(2)},${y.toFixed(2)}`
 }
 
-// 线路绘制：共线走廊并行错开
+// 线路族：去掉括号里的支线/别名后缀，用于判断「同一条线路的不同支线」。
+// 例：「龙华有轨电车(新澜-清湖)」「龙华有轨电车(清湖-下围)」同属「龙华有轨电车」。
+function lineFamily(id) {
+  return String(id).replace(/\([^)]*\)/g, '').trim()
+}
+
+// 线路绘制：共线走廊处理
 // 规则：
 // 1) 有 line.path 的线路（高德）保持原样一条 polyline；
-// 2) 无 path 的线路按站点分段；若某段落在「多条线重合的几何走廊」上，则按垂直方向错开并排；
-// 3) 连续共线段做成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
+// 2) 无 path 的线路按站点分段；
+// 3) 若某段落在「多条线重合的几何走廊」上：
+//    - 同族（如龙华有轨电车两条支线）→ 只画一次，居中；
+//    - 跨族（如 4 号线与 6 号线）→ 按垂直方向错开并排；
+// 4) 连续共线段做成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
 const lineSegPolys = computed(() => {
   if (!props.cityData) return []
   const c = stationCoords.value
@@ -291,44 +300,57 @@ const lineSegPolys = computed(() => {
         const run = segs.slice(runStart, i)
 
         if (run[0].shared.length > 1) {
-          // 共线 run：计算本线在这条 run 里的横向偏移量
           const shared = run[0].shared
-          const idx = shared.indexOf(line.id)
-          const mag = (idx - (shared.length - 1) / 2) * gap
+          const sharedFams = new Set(shared.map(lineFamily))
 
-          // 用 run 的累计方向算垂直方向（统一 canonical，保证同走廊两侧一致）
-          let dx = 0, dy = 0
-          for (const s of run) { dx += s.bx - s.ax; dy += s.by - s.ay }
-          if (dx < 0 || (dx === 0 && dy < 0)) { dx = -dx; dy = -dy }
-          const len = Math.hypot(dx, dy)
-          let ox = 0, oy = 0
-          if (len > 0) {
-            ox = (-dy / len) * mag
-            oy = (dx / len) * mag
-          }
-
-          if (run.length === 1) {
-            // 只有一段共线：整体平移
-            const s = run[0]
-            result.push({
-              key: `l-${line.id}-${runStart}`,
-              lineId: line.id,
-              color: line.color,
-              points: `${fmtPt(s.ax + ox, s.ay + oy)} ${fmtPt(s.bx + ox, s.by + oy)}`
-            })
-          } else {
-            // 连续共线：端点站居中，中间站统一偏移，形成干净平行线
+          if (sharedFams.size === 1) {
+            // 同族共线：只让族内第一条线代表绘制一次，居中；其余同族线跳过，避免重复画线
+            if (shared[0] !== line.id) { runStart = i; continue }
             const pts = [fmtPt(run[0].ax, run[0].ay)]
-            for (let j = 0; j < run.length - 1; j++) {
-              pts.push(fmtPt(run[j].bx + ox, run[j].by + oy))
-            }
-            pts.push(fmtPt(run[run.length - 1].bx, run[run.length - 1].by))
+            for (const s of run) pts.push(fmtPt(s.bx, s.by))
             result.push({
               key: `l-${line.id}-${runStart}`,
               lineId: line.id,
               color: line.color,
               points: pts.join(' ')
             })
+          } else {
+            // 跨族共线：按垂直方向错开并排
+            const idx = shared.indexOf(line.id)
+            const mag = (idx - (shared.length - 1) / 2) * gap
+
+            // 用 run 的累计方向算垂直方向（统一 canonical，保证同走廊两侧一致）
+            let dx = 0, dy = 0
+            for (const s of run) { dx += s.bx - s.ax; dy += s.by - s.ay }
+            if (dx < 0 || (dx === 0 && dy < 0)) { dx = -dx; dy = -dy }
+            const len = Math.hypot(dx, dy)
+            let ox = 0, oy = 0
+            if (len > 0) {
+              ox = (-dy / len) * mag
+              oy = (dx / len) * mag
+            }
+
+            if (run.length === 1) {
+              const s = run[0]
+              result.push({
+                key: `l-${line.id}-${runStart}`,
+                lineId: line.id,
+                color: line.color,
+                points: `${fmtPt(s.ax + ox, s.ay + oy)} ${fmtPt(s.bx + ox, s.by + oy)}`
+              })
+            } else {
+              const pts = [fmtPt(run[0].ax, run[0].ay)]
+              for (let j = 0; j < run.length - 1; j++) {
+                pts.push(fmtPt(run[j].bx + ox, run[j].by + oy))
+              }
+              pts.push(fmtPt(run[run.length - 1].bx, run[run.length - 1].by))
+              result.push({
+                key: `l-${line.id}-${runStart}`,
+                lineId: line.id,
+                color: line.color,
+                points: pts.join(' ')
+              })
+            }
           }
         } else {
           // 非共线 run：居中绘制
@@ -526,7 +548,7 @@ const stations = computed(() => {
   return [...byName.values()].map(({ id, st, co, dupIds }) => {
     const lines = st.lines || []
     // 换乘按「线路族」判定：同族支线（如龙华有轨电车两条支线）不算换乘，跨族才标。
-    const fams = new Set(lines.map(l => String(l).replace(/\([^)]*\)/g, '').trim()))
+    const fams = new Set(lines.map(lineFamily))
     const isTransfer = fams.size >= 2
     const isStart = dupIds.includes(props.startId)
     const isEnd = dupIds.includes(props.endId)
