@@ -735,7 +735,11 @@
       "lines": [
         "1号线(罗宝线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "left",
+        "distance": "near"
+      }
     },
     "大新": {
       "id": "大新",
@@ -925,7 +929,11 @@
         "2号线(8号线)",
         "5号线(环中线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "老街": {
       "id": "老街",
@@ -1245,7 +1253,11 @@
         "2号线(8号线)",
         "5号线(环中线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "新秀": {
       "id": "新秀",
@@ -1918,7 +1930,11 @@
         "5号线(环中线)",
         "6号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "白石龙": {
       "id": "白石龙",
@@ -1992,7 +2008,11 @@
       "lines": [
         "5号线(环中线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "tl",
+        "distance": "near"
+      }
     },
     "怡景": {
       "id": "怡景",
@@ -2191,7 +2211,11 @@
         "5号线(环中线)",
         "12号线(南宝线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "翻身": {
       "id": "翻身",
@@ -2701,7 +2725,11 @@
       "lines": [
         "7号线(西丽线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "沙尾": {
       "id": "沙尾",
@@ -3006,7 +3034,11 @@
       "lines": [
         "9号线(梅林线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "园岭": {
       "id": "园岭",
@@ -3037,7 +3069,11 @@
       "lines": [
         "9号线(梅林线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "人民南": {
       "id": "人民南",
@@ -3167,7 +3203,11 @@
       "lines": [
         "10号线"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "华为": {
       "id": "华为",
@@ -3925,7 +3965,11 @@
         "14号线",
         "坪山云巴1号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "坪山广场": {
       "id": "坪山广场",
@@ -3946,7 +3990,11 @@
         "14号线",
         "16号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "锦龙": {
       "id": "锦龙",

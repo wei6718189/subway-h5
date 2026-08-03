@@ -215,33 +215,128 @@ const stationCoords = computed(() => {
   return map
 })
 
-// 几何重合走廊：把「投影后端点完全重合」的线路段归为一组
-// 不分站点 ID —— 只要两条线在某一段画在同一条轨迹上（哪怕站点序列不同）就算共线
+// 几何重合走廊：把「投影后画在同一条几何直线上的轨迹」归为一组
+// 支持两种共线：
+//   1) 精确 segment 两端点完全重合（原逻辑）；
+//   2) 一条线的单段与另一条线的多段折线共线（如 2号线 大剧院-湖贝 与 5号线 大剧院-东门-湖贝）。
+// 实现：把每条线拆成「最大共线 run」，再按几何直线（角度+距离）+ 投影区间重叠做并查集分组。
 const corridorShares = computed(() => {
-  if (!props.cityData) return { geo: new Map(), segsByLine: new Map() }
+  if (!props.cityData) return { runs: [], runsByLine: new Map(), runShared: new Map() }
   const c = stationCoords.value
-  const geo = new Map()        // geoKey -> Set(lineId)
-  const segsByLine = new Map() // lineId -> [{i, ax,ay,bx,by, geoKey}]
-  const keyOf = (ax, ay, bx, by) => {
-    // 顺序无关，避免两条线反向经过同一段时 key 不同
-    let x1 = ax, y1 = ay, x2 = bx, y2 = by
-    if (x1 > x2 || (x1 === x2 && y1 > y2)) { [x1, x2] = [x2, x1]; [y1, y2] = [y2, y1] }
-    return `${Math.round(x1)},${Math.round(y1)}_${Math.round(x2)},${Math.round(y2)}`
+  const lines = props.cityData.lines || []
+
+  // 三点是否近似共线：C 到 AB 的垂直距离 / |AB| <= 0.15
+  function collinear(aId, bId, ccId) {
+    const a = c[aId], b = c[bId], cc = c[ccId]
+    if (!a || !b || !cc) return false
+    const dx = b.x - a.x, dy = b.y - a.y
+    const len2 = dx * dx + dy * dy
+    if (len2 === 0) return false
+    const cross = Math.abs((cc.x - a.x) * dy - (cc.y - a.y) * dx)
+    return cross / len2 <= 0.15
   }
-  for (const line of props.cityData.lines || []) {
+
+  // 1. 拆分最大共线 runs（单个 segment 也作为一个 run）
+  const runs = []
+  const runsByLine = new Map()
+  for (const line of lines) {
     const ids = line.stationIds || []
-    const items = []
-    for (let i = 0; i < ids.length - 1; i++) {
-      const ca = c[ids[i]], cb = c[ids[i + 1]]
-      if (!ca || !cb) continue
-      const k = keyOf(ca.x, ca.y, cb.x, cb.y)
-      items.push({ i, ax: ca.x, ay: ca.y, bx: cb.x, by: cb.y, geoKey: k })
-      if (!geo.has(k)) geo.set(k, new Set())
-      geo.get(k).add(line.id)
+    const rawRuns = []
+    let start = 0
+    for (let i = 2; i < ids.length; i++) {
+      if (!collinear(ids[i - 2], ids[i - 1], ids[i])) {
+        rawRuns.push({ start, end: i - 1, lineId: line.id })
+        start = i - 1
+      }
     }
-    segsByLine.set(line.id, items)
+    if (ids.length - 1 - start >= 1) {
+      rawRuns.push({ start, end: ids.length - 1, lineId: line.id })
+    }
+    const enriched = rawRuns.map(r => {
+      const aId = ids[r.start], bId = ids[r.end]
+      const ca = c[aId], cb = c[bId]
+      return {
+        idx: runs.length,
+        lineId: line.id,
+        startIdx: r.start,
+        endIdx: r.end,
+        aId, bId,
+        ax: ca?.x ?? 0, ay: ca?.y ?? 0,
+        bx: cb?.x ?? 0, by: cb?.y ?? 0
+      }
+    })
+    runs.push(...enriched)
+    runsByLine.set(line.id, enriched)
   }
-  return { geo, segsByLine }
+
+  // 2. 为每个 run 计算几何签名与投影区间
+  const sigs = runs.map(r => {
+    const dx = r.bx - r.ax, dy = r.by - r.ay
+    const len = Math.hypot(dx, dy)
+    let angle = 0, d = 0, ux = 0, uy = 0, tMin = 0, tMax = 0
+    if (len > 0) {
+      ux = dx / len; uy = dy / len
+      const nx = -uy, ny = ux
+      d = r.ax * nx + r.ay * ny
+      angle = Math.atan2(dy, dx) * 180 / Math.PI
+      if (angle < 0) angle += 180
+      tMin = r.ax * ux + r.ay * uy
+      tMax = r.bx * ux + r.by * uy
+      if (tMin > tMax) [tMin, tMax] = [tMax, tMin]
+    }
+    return {
+      angleBucket: Math.round(angle / 5),
+      distBucket: Math.round(d / 2),
+      tMin, tMax, len
+    }
+  })
+
+  // 3. 并查集：同几何直线且投影区间重叠的 run 归为一组
+  const parent = Array.from({ length: runs.length }, (_, i) => i)
+  function find(x) {
+    while (parent[x] !== x) {
+      parent[x] = parent[parent[x]]
+      x = parent[x]
+    }
+    return x
+  }
+  function union(a, b) {
+    const ra = find(a), rb = find(b)
+    if (ra !== rb) parent[ra] = rb
+  }
+  const buckets = new Map()
+  for (let i = 0; i < runs.length; i++) {
+    const s = sigs[i]
+    const key = `${s.angleBucket}_${s.distBucket}`
+    if (!buckets.has(key)) buckets.set(key, [])
+    buckets.get(key).push(i)
+  }
+  for (const list of buckets.values()) {
+    for (let i = 0; i < list.length; i++) {
+      for (let j = i + 1; j < list.length; j++) {
+        const a = list[i], b = list[j]
+        const sa = sigs[a], sb = sigs[b]
+        const margin = Math.min(sa.len, sb.len) * 0.1
+        if (sa.tMax + margin >= sb.tMin && sb.tMax + margin >= sa.tMin) {
+          union(a, b)
+        }
+      }
+    }
+  }
+
+  // 4. 每个 component 内聚合线路 ID
+  const compLines = new Map()
+  for (let i = 0; i < runs.length; i++) {
+    const root = find(i)
+    if (!compLines.has(root)) compLines.set(root, new Set())
+    compLines.get(root).add(runs[i].lineId)
+  }
+  const runShared = new Map()
+  for (let i = 0; i < runs.length; i++) {
+    runShared.set(i, compLines.get(find(i)))
+  }
+
+  return { runs, runsByLine, runShared }
 })
 
 function fmtPt(x, y) {
@@ -257,15 +352,15 @@ function lineFamily(id) {
 // 线路绘制：共线走廊处理
 // 规则：
 // 1) 有 line.path 的线路（高德）保持原样一条 polyline；
-// 2) 无 path 的线路按站点分段；
-// 3) 若某段落在「多条线重合的几何走廊」上：
+// 2) 无 path 的线路按「共线 run」分组；
+// 3) 若某 run 落在「多条线重合的几何走廊」上：
 //    - 同族（如龙华有轨电车两条支线）→ 只画一次，居中；
-//    - 跨族（如 4 号线与 6 号线）→ 按垂直方向错开并排；
-// 4) 连续共线段做成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
+//    - 跨族（如 2 号线与 5 号线）→ 按垂直方向错开并排；
+// 4) 连续共线 run 组成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
 const lineSegPolys = computed(() => {
   if (!props.cityData) return []
   const c = stationCoords.value
-  const { geo, segsByLine } = corridorShares.value
+  const { runsByLine, runShared } = corridorShares.value
   const gap = baseLineWidth.value * 1.25
   const result = []
 
@@ -282,46 +377,54 @@ const lineSegPolys = computed(() => {
       continue
     }
 
-    const items = segsByLine.get(line.id) || []
-    if (!items.length) continue
+    const lineRuns = runsByLine.get(line.id) || []
+    if (!lineRuns.length) continue
+    const ids = line.stationIds || []
 
-    // 预计算每个 segment 的共享线集合（按 geoKey）
-    const segs = items.map(it => {
-      const shared = [...(geo.get(it.geoKey) || new Set())].sort()
-      return { ...it, shared, sharedKey: shared.length > 1 ? shared.join('|') : '' }
-    })
+    // 按 runShared 的 key 把连续 run 聚成 group
+    let groupStart = 0
+    for (let i = 1; i <= lineRuns.length; i++) {
+      const startRun = lineRuns[groupStart]
+      const nextRun = i < lineRuns.length ? lineRuns[i] : null
+      const sharedKey = [...runShared.get(startRun.idx)].sort().join('|')
+      const nextKey = nextRun ? [...runShared.get(nextRun.idx)].sort().join('|') : null
+      if (i === lineRuns.length || nextKey !== sharedKey) {
+        const group = lineRuns.slice(groupStart, i)
+        const shared = runShared.get(startRun.idx)
+        const sharedArr = [...shared].sort()
+        const startIdx = group[0].startIdx
+        const endIdx = group[group.length - 1].endIdx
 
-    // 按 sharedKey 把连续段聚成 run
-    let runStart = 0
-    for (let i = 1; i <= segs.length; i++) {
-      const runKey = segs[runStart].sharedKey
-      const nextKey = i < segs.length ? segs[i].sharedKey : null
-      if (i === segs.length || nextKey !== runKey) {
-        const run = segs.slice(runStart, i)
-
-        if (run[0].shared.length > 1) {
-          const shared = run[0].shared
-          const sharedFams = new Set(shared.map(lineFamily))
+        if (shared.size > 1) {
+          const sharedFams = new Set(sharedArr.map(lineFamily))
 
           if (sharedFams.size === 1) {
-            // 同族共线：只让族内第一条线代表绘制一次，居中；其余同族线跳过，避免重复画线
-            if (shared[0] !== line.id) { runStart = i; continue }
-            const pts = [fmtPt(run[0].ax, run[0].ay)]
-            for (const s of run) pts.push(fmtPt(s.bx, s.by))
-            result.push({
-              key: `l-${line.id}-${runStart}`,
-              lineId: line.id,
-              color: line.color,
-              points: pts.join(' ')
-            })
+            // 同族共线：只让族内第一条线代表绘制一次，居中；其余同族线跳过
+            if (sharedArr[0] !== line.id) { groupStart = i; continue }
+            const pts = []
+            for (let k = startIdx; k <= endIdx; k++) {
+              const co = c[ids[k]]
+              if (co) pts.push(fmtPt(co.x, co.y))
+            }
+            if (pts.length) {
+              result.push({
+                key: `l-${line.id}-${groupStart}`,
+                lineId: line.id,
+                color: line.color,
+                points: pts.join(' ')
+              })
+            }
           } else {
             // 跨族共线：按垂直方向错开并排
-            const idx = shared.indexOf(line.id)
-            const mag = (idx - (shared.length - 1) / 2) * gap
+            const idx = sharedArr.indexOf(line.id)
+            const mag = (idx - (sharedArr.length - 1) / 2) * gap
 
-            // 用 run 的累计方向算垂直方向（统一 canonical，保证同走廊两侧一致）
+            // 用 group 的累计方向算垂直方向（统一 canonical，保证同走廊两侧一致）
             let dx = 0, dy = 0
-            for (const s of run) { dx += s.bx - s.ax; dy += s.by - s.ay }
+            for (let k = startIdx; k < endIdx; k++) {
+              const ca = c[ids[k]], cb = c[ids[k + 1]]
+              if (ca && cb) { dx += cb.x - ca.x; dy += cb.y - ca.y }
+            }
             if (dx < 0 || (dx === 0 && dy < 0)) { dx = -dx; dy = -dy }
             const len = Math.hypot(dx, dy)
             let ox = 0, oy = 0
@@ -330,22 +433,16 @@ const lineSegPolys = computed(() => {
               oy = (dx / len) * mag
             }
 
-            if (run.length === 1) {
-              const s = run[0]
-              result.push({
-                key: `l-${line.id}-${runStart}`,
-                lineId: line.id,
-                color: line.color,
-                points: `${fmtPt(s.ax + ox, s.ay + oy)} ${fmtPt(s.bx + ox, s.by + oy)}`
-              })
-            } else {
-              const pts = [fmtPt(run[0].ax, run[0].ay)]
-              for (let j = 0; j < run.length - 1; j++) {
-                pts.push(fmtPt(run[j].bx + ox, run[j].by + oy))
+            const startCo = c[ids[startIdx]], endCo = c[ids[endIdx]]
+            if (startCo && endCo) {
+              const pts = [fmtPt(startCo.x, startCo.y)]
+              for (let k = startIdx + 1; k < endIdx; k++) {
+                const co = c[ids[k]]
+                if (co) pts.push(fmtPt(co.x + ox, co.y + oy))
               }
-              pts.push(fmtPt(run[run.length - 1].bx, run[run.length - 1].by))
+              pts.push(fmtPt(endCo.x, endCo.y))
               result.push({
-                key: `l-${line.id}-${runStart}`,
+                key: `l-${line.id}-${groupStart}`,
                 lineId: line.id,
                 color: line.color,
                 points: pts.join(' ')
@@ -353,18 +450,23 @@ const lineSegPolys = computed(() => {
             }
           }
         } else {
-          // 非共线 run：居中绘制
-          const pts = [fmtPt(run[0].ax, run[0].ay)]
-          for (const s of run) pts.push(fmtPt(s.bx, s.by))
-          result.push({
-            key: `l-${line.id}-${runStart}`,
-            lineId: line.id,
-            color: line.color,
-            points: pts.join(' ')
-          })
+          // 非共线 group：居中绘制
+          const pts = []
+          for (let k = startIdx; k <= endIdx; k++) {
+            const co = c[ids[k]]
+            if (co) pts.push(fmtPt(co.x, co.y))
+          }
+          if (pts.length) {
+            result.push({
+              key: `l-${line.id}-${groupStart}`,
+              lineId: line.id,
+              color: line.color,
+              points: pts.join(' ')
+            })
+          }
         }
 
-        runStart = i
+        groupStart = i
       }
     }
   }

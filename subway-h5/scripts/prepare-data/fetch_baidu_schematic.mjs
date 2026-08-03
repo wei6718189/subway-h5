@@ -48,7 +48,20 @@ const LABEL_OVERRIDES = {
     '上屋': { position: 'bot', distance: 'near' },
     '前湾': { position: 'top', distance: 'near' },
     '大运': { position: 'top', distance: 'near' },
-    '清湖': { position: 'top', distance: 'near' }
+    '清湖': { position: 'top', distance: 'near' },
+    // —— 第三批调整 ——
+    '深圳北站': { position: 'top', distance: 'near' },
+    '泥岗': { position: 'top', distance: 'near' },
+    '坪山中心': { position: 'top', distance: 'near' },
+    '岗头': { position: 'top', distance: 'near' },
+    '大剧院': { position: 'bot', distance: 'near' },
+    '黄贝岭': { position: 'bot', distance: 'near' },
+    '坪山围': { position: 'bot', distance: 'near' },
+    '上沙': { position: 'bot', distance: 'near' },
+    '鹿丹村': { position: 'bot', distance: 'near' },
+    '东门': { position: 'tl', distance: 'near' },
+    '灵芝': { position: 'right', distance: 'near' },
+    '鲤鱼门': { position: 'left', distance: 'near' }
   },
   guangzhou: {}
 }
