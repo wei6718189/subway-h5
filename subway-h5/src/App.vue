@@ -87,7 +87,23 @@
       </div>
     </Teleport>
 
-    <div class="bottom-panel">
+    <div
+      class="bottom-panel"
+      :class="drawerExpanded ? 'expanded' : 'collapsed'"
+      :style="drawerStyle"
+      ref="panelRef"
+    >
+      <div
+        class="drawer-handle"
+        @click="toggleDrawer"
+        @touchstart="onHandleTouchStart"
+        @touchmove.prevent="onHandleTouchMove"
+        @touchend="onHandleTouchEnd"
+      >
+        <div class="drawer-bar"></div>
+        <div v-if="!drawerExpanded && fastestSummary" class="drawer-peek-text">{{ fastestSummary }}</div>
+      </div>
+
       <StationSearch
         ref="searchRef"
         :city-data="cityData"
@@ -121,10 +137,24 @@ import { planRoute } from './lib/graph.js'
 
 const currentCity = ref('shenzhen')
 const currentProvider = ref('baidu')
+const drawerExpanded = ref(true)
+const panelRef = ref(null)
+const dragY = ref(0)
+let drawerStartY = 0
+let drawerPanelH = 0
 const providers = PROVIDERS
 // 隐藏「百度（真实坐标地理位置）」选项，后期需要时可移除此过滤
 const visibleProviders = computed(() => providers.filter(p => p.id !== 'baidu-geo'))
 const currentProviderName = computed(() => visibleProviders.value.find(p => p.id === currentProvider.value)?.name || '')
+const drawerStyle = computed(() => {
+  if (!drawerExpanded.value || dragY.value <= 0) return {}
+  return { transform: `translateY(${dragY.value}px)` }
+})
+const fastestSummary = computed(() => {
+  const plan = route.value?.fastest
+  if (!plan) return ''
+  return `${plan.duration}分 · ${plan.stops.length}站 · 换乘${plan.transfers}次`
+})
 const providerRef = ref(null)
 const providerOpen = ref(false)
 const notice = ref('')
@@ -424,6 +454,7 @@ function onPlan() {
   }
   route.value = result
   activeKey.value = 'fastest'
+  drawerExpanded.value = true
   const plan = result.fastest
   const stationIds = []
   for (const leg of plan.legs) stationIds.push(...leg.stops)
@@ -443,6 +474,37 @@ function onSelectPlan(key) {
 function onClearRoute() {
   route.value = null
   activeKey.value = 'fastest'
+  mapRef.value?.fitAll()
+}
+
+function toggleDrawer() {
+  drawerExpanded.value = !drawerExpanded.value
+  dragY.value = 0
+}
+
+function onHandleTouchStart(e) {
+  drawerStartY = e.touches[0].clientY
+  drawerPanelH = panelRef.value?.offsetHeight || 0
+  dragY.value = 0
+}
+
+function onHandleTouchMove(e) {
+  if (!drawerExpanded.value) return
+  const dy = e.touches[0].clientY - drawerStartY
+  if (dy > 0) {
+    // 拖动距离不超过收起后露出的高度，避免拉过头
+    const maxDy = Math.max(0, drawerPanelH - 76)
+    dragY.value = Math.min(dy, maxDy)
+  }
+}
+
+function onHandleTouchEnd(e) {
+  const dy = e.changedTouches[0].clientY - drawerStartY
+  const threshold = Math.max(40, drawerPanelH * 0.2)
+  if (drawerExpanded.value && dy > threshold) {
+    drawerExpanded.value = false
+  }
+  dragY.value = 0
 }
 
 onCityChange('shenzhen')
