@@ -226,6 +226,7 @@ defineExpose({ setStationFromMap, setStart, setEnd, reset, onClear })
   min-width: 0;
   max-width: 100%;
   overflow: visible;
+  margin-bottom: 16px;
 }
 .search-row {
   display: flex;
