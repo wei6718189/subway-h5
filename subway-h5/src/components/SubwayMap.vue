@@ -558,7 +558,7 @@ const labelData = computed(() => {
 
     const near = make8(baseR)
     const mid  = make8(baseR * 1.8)
-    const far  = make8(baseR * 3.0)
+    const far  = make8(baseR * 2.3)
 
     // 换乘站：优先对角 → 再水平/垂直两侧，避免十字交叉线路上下左右都压线
     // 单线路站：水平线上下优先，垂直线左右优先
@@ -613,7 +613,7 @@ const labelData = computed(() => {
       if (ov.position) {
         // 方式 A：根据方向 + 距离档位自动计算偏移
         const baseR = visR(s) + gap
-        const distMul = ov.distance === 'mid' ? 1.8 : ov.distance === 'far' ? 3.0 : 1.0
+        const distMul = ov.distance === 'mid' ? 1.8 : ov.distance === 'far' ? 2.3 : 1.0
         const r = baseR * distMul
         const diag = r * 0.707
         const POS_MAP = {

@@ -3266,7 +3266,11 @@
         "12号线(南宝线)",
         "城际(新塘南-深圳机场)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "br",
+        "distance": "near"
+      }
     },
     "桥头西": {
       "id": "桥头西",
@@ -3276,7 +3280,11 @@
       "lines": [
         "12号线(南宝线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "怀德": {
       "id": "怀德",
@@ -4108,7 +4116,11 @@
       "lines": [
         "20号线"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "会展城": {
       "id": "会展城",
@@ -4534,7 +4546,11 @@
       "lines": [
         "城际(新塘南-深圳机场)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "a2ba8229af3f54a2e812e4ad": {
       "id": "a2ba8229af3f54a2e812e4ad",

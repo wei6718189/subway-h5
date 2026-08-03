@@ -18,6 +18,18 @@ const BAIDU_CITY_CODE = { shenzhen: 340, guangzhou: 257, nanning: 326 }
 
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
 
+// 按「城市 → 站名」注入 labelOverride，用于修正手机端标签被算法推远的问题
+// 与高德数据格式保持一致：{ position: 'top'|'bot'|'left'|'right'|'tl'|'tr'|'bl'|'br', distance: 'near'|'mid'|'far' }
+const LABEL_OVERRIDES = {
+  shenzhen: {
+    '桥头西': { position: 'right', distance: 'near' },
+    '福海西': { position: 'br', distance: 'near' },
+    '国展南': { position: 'top', distance: 'near' },
+    '沙井西': { position: 'bot', distance: 'near' }
+  },
+  guangzhou: {}
+}
+
 // 官方 lc 缺失时的兜底调色板
 const PALETTE = [
   '#E4002B', '#0072CE', '#00A651', '#F39700', '#92278F', '#00A0E9',
@@ -101,9 +113,10 @@ async function fetchCity(cityId, code) {
 
   const finalStations = {}
   let transfer = 0
+  const cityOverrides = LABEL_OVERRIDES[cityId] || {}
   for (const [id, s] of Object.entries(stations)) {
     const linesArr = [...s.lines]
-    finalStations[id] = {
+    const obj = {
       id,
       name: s.name,
       x: s.x,
@@ -111,6 +124,9 @@ async function fetchCity(cityId, code) {
       lines: linesArr,
       isTransfer: linesArr.length > 1
     }
+    const ov = cityOverrides[s.name]
+    if (ov) obj.labelOverride = ov
+    finalStations[id] = obj
     if (linesArr.length > 1) transfer++
   }
   return { lines: outLines, stations: finalStations, transfer }
