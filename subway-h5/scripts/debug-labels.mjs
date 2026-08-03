@@ -3,7 +3,7 @@
 
 import { readFileSync } from 'node:fs'
 
-const data = JSON.parse(readFileSync('./public/data/shenzhen.json', 'utf8'))
+const data = JSON.parse(readFileSync('./public/data-amap/shenzhen.json', 'utf8'))
 const stationsRaw = data.stations
 const lines = data.lines
 
