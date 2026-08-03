@@ -113,7 +113,7 @@ import { loadCity, PROVIDERS, BAIDU_CITIES, CITIES } from './lib/loadData.js'
 import { planRoute } from './lib/graph.js'
 
 const currentCity = ref('shenzhen')
-const currentProvider = ref('amap')
+const currentProvider = ref('baidu')
 const providers = PROVIDERS
 const currentProviderName = computed(() => providers.find(p => p.id === currentProvider.value)?.name || '')
 const providerRef = ref(null)
