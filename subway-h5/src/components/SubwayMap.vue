@@ -15,15 +15,15 @@
       <g :transform="`translate(${tx} ${ty}) scale(${scale})`">
         <!-- 线路 -->
         <polyline
-          v-for="line in linePolys"
-          :key="'l-' + line.id"
-          :points="line.points"
-          :stroke="line.color"
-          :stroke-width="(highlightLineId && highlightLineId === line.id) ? baseLineWidthHL : baseLineWidth"
+          v-for="seg in lineSegPolys"
+          :key="seg.key"
+          :points="seg.points"
+          :stroke="seg.color"
+          :stroke-width="(highlightLineId && highlightLineId === seg.lineId) ? baseLineWidthHL : baseLineWidth"
           stroke-linejoin="round"
           stroke-linecap="round"
           fill="none"
-          :opacity="lineOpacity(line.id)"
+          :opacity="lineOpacity(seg.lineId)"
           style="transition: opacity 0.2s, stroke-width 0.2s"
         />
         <!-- 高亮路径段（规划结果线路，优先级最高） -->
@@ -215,30 +215,134 @@ const stationCoords = computed(() => {
   return map
 })
 
-const linePolys = computed(() => {
+// 共线区间：把同一段两站之间被多条线路共用的区间找出来，用于平行错开绘制
+const segmentShares = computed(() => {
+  if (!props.cityData) return new Map()
+  const shares = new Map()
+  for (const line of props.cityData.lines || []) {
+    const ids = line.stationIds || []
+    for (let i = 0; i < ids.length - 1; i++) {
+      const a = ids[i], b = ids[i + 1]
+      const key = a < b ? `${a}~${b}` : `${b}~${a}`
+      if (!shares.has(key)) shares.set(key, [])
+      shares.get(key).push(line.id)
+    }
+  }
+  // 去重并按 line.id 排序，保证同一区间各线的左右顺序稳定
+  for (const [key, arr] of shares) {
+    shares.set(key, [...new Set(arr)].sort())
+  }
+  return shares
+})
+
+function fmtPt(x, y) {
+  return `${x.toFixed(2)},${y.toFixed(2)}`
+}
+
+// 线路绘制：支持共线区间平行错开
+// 规则：
+// 1) 有 line.path 的线路（高德）保持原样一条 polyline；
+// 2) 无 path 的线路按站点分段；若某段被多条线路共用，则按垂直方向错开并排；
+// 3) 连续共线段做成一条 polyline：端点站保持居中，中间站点统一向同侧偏移，避免锯齿。
+const lineSegPolys = computed(() => {
   if (!props.cityData) return []
-  const p = proj.value
-  return (props.cityData.lines || []).map(line => {
-    let pts = ''
-    // 优先使用高德提供的路径 polyline 点（更平滑准确）
+  const c = stationCoords.value
+  const shares = segmentShares.value
+  const gap = baseLineWidth.value * 1.25
+  const result = []
+
+  for (const line of props.cityData.lines || []) {
+    // 高德 path：保持原样
     if (line.path && line.path.length > 0) {
-      pts = line.path
+      const pts = line.path
         .map(([x, y]) => {
-          const pt = p.projectXY(x, y)
-          return `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`
+          const pt = proj.value.projectXY(x, y)
+          return fmtPt(pt.x, pt.y)
         })
         .join(' ')
-    } else {
-      // 回退：用站点坐标连线
-      const c = stationCoords.value
-      pts = (line.stationIds || [])
-        .map(id => c[id])
-        .filter(Boolean)
-        .map(pt => `${pt.x.toFixed(2)},${pt.y.toFixed(2)}`)
-        .join(' ')
+      if (pts) result.push({ key: `l-${line.id}-path`, lineId: line.id, color: line.color, points: pts })
+      continue
     }
-    return { id: line.id, color: line.color, points: pts }
-  }).filter(l => l.points)
+
+    const ids = line.stationIds || []
+    if (ids.length < 2) continue
+
+    // 构建本线各段信息
+    const segs = []
+    for (let i = 0; i < ids.length - 1; i++) {
+      const a = c[ids[i]], b = c[ids[i + 1]]
+      if (!a || !b) continue
+      const key = ids[i] < ids[i + 1] ? `${ids[i]}~${ids[i + 1]}` : `${ids[i + 1]}~${ids[i]}`
+      const shared = shares.get(key) || [line.id]
+      const sharedKey = shared.length > 1 ? shared.join('|') : ''
+      segs.push({ a, b, key, shared, sharedKey })
+    }
+
+    // 按 sharedKey 把连续段聚成 run
+    let runStart = 0
+    for (let i = 1; i <= segs.length; i++) {
+      const runKey = segs[runStart].sharedKey
+      const nextKey = i < segs.length ? segs[i].sharedKey : null
+      if (i === segs.length || nextKey !== runKey) {
+        const run = segs.slice(runStart, i)
+
+        if (run[0].shared.length > 1) {
+          // 共线 run：计算本线在这条 run 里的横向偏移量
+          const shared = run[0].shared
+          const idx = shared.indexOf(line.id)
+          const mag = (idx - (shared.length - 1) / 2) * gap
+
+          // 用 run 的累计方向算垂直方向
+          let dx = 0, dy = 0
+          for (const s of run) { dx += s.b.x - s.a.x; dy += s.b.y - s.a.y }
+          const len = Math.hypot(dx, dy)
+          let ox = 0, oy = 0
+          if (len > 0) {
+            ox = (-dy / len) * mag
+            oy = (dx / len) * mag
+          }
+
+          if (run.length === 1) {
+            // 只有一段共线：整体平移
+            const s = run[0]
+            result.push({
+              key: `l-${line.id}-${runStart}`,
+              lineId: line.id,
+              color: line.color,
+              points: `${fmtPt(s.a.x + ox, s.a.y + oy)} ${fmtPt(s.b.x + ox, s.b.y + oy)}`
+            })
+          } else {
+            // 连续共线：端点站居中，中间站统一偏移，形成干净平行线
+            const pts = [fmtPt(run[0].a.x, run[0].a.y)]
+            for (let j = 0; j < run.length - 1; j++) {
+              pts.push(fmtPt(run[j].b.x + ox, run[j].b.y + oy))
+            }
+            pts.push(fmtPt(run[run.length - 1].b.x, run[run.length - 1].b.y))
+            result.push({
+              key: `l-${line.id}-${runStart}`,
+              lineId: line.id,
+              color: line.color,
+              points: pts.join(' ')
+            })
+          }
+        } else {
+          // 非共线 run：居中绘制
+          const pts = [fmtPt(run[0].a.x, run[0].a.y)]
+          for (const s of run) pts.push(fmtPt(s.b.x, s.b.y))
+          result.push({
+            key: `l-${line.id}-${runStart}`,
+            lineId: line.id,
+            color: line.color,
+            points: pts.join(' ')
+          })
+        }
+
+        runStart = i
+      }
+    }
+  }
+
+  return result
 })
 
 // 高亮路径中包含的站点集合（用于强调）
