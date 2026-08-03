@@ -525,7 +525,9 @@ const stations = computed(() => {
   }
   return [...byName.values()].map(({ id, st, co, dupIds }) => {
     const lines = st.lines || []
-    const isTransfer = lines.length >= 2
+    // 换乘按「线路族」判定：同族支线（如龙华有轨电车两条支线）不算换乘，跨族才标。
+    const fams = new Set(lines.map(l => String(l).replace(/\([^)]*\)/g, '').trim()))
+    const isTransfer = fams.size >= 2
     const isStart = dupIds.includes(props.startId)
     const isEnd = dupIds.includes(props.endId)
     const onRoute = dupIds.some(did => highlightStationSet.value.has(did))

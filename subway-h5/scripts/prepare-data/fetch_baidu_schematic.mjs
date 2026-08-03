@@ -82,16 +82,21 @@ function parseLines(xml) {
 
 function isMetroLike(name) {
   // 与高德口径对齐：保留地铁/APM/广佛/佛山地铁等城市轨道交通；
-  // 剔除有轨电车、城际铁路，避免与地铁线路重叠/缠绕（如深圳龙华有轨电车）。
-  if (/有轨电车/.test(name)) return false
-  if (/城际/.test(name)) return false
+  // 注意：保留有轨电车、城际铁路（用户要求），仅在与地铁图对比时按口径取舍。
   return true
+}
+
+// 线路族：去掉括号里的支线/别名后缀，用于换乘判定。
+// 例：「龙华有轨电车(新澜-清湖)」「龙华有轨电车(清湖-下围)」同属「龙华有轨电车」族，
+// 共用走廊的站点不算换乘；「4号线(龙华线)」族为「4号线」，不影响地铁换乘判定。
+function lineFamily(id) {
+  return id.replace(/\([^)]*\)/g, '').trim()
 }
 
 async function fetchCity(cityId, code) {
   const url = `https://map.baidu.com/?qt=subways&c=${code}&t=${Date.now()}000`
   const xml = fetchXml(url)
-  const rawLines = parseLines(xml).filter(l => isMetroLike(l.name))
+  const rawLines = parseLines(xml)
 
   const stations = {}
   const nameToMain = {} // 站名（或坐标兜底）→ 主 station id（用于合并换乘站）
@@ -130,13 +135,16 @@ async function fetchCity(cityId, code) {
   for (const [id, s] of Object.entries(stations)) {
     const linesArr = [...s.lines]
     if (linesArr.length === 0) continue // 过滤被有轨电车/城际独占的孤儿站
+    // 换乘判定按「线路族」而非原始线路数：同族支线（如龙华有轨电车两条支线）共用走廊，
+    // 其上的站点不算换乘；跨族（地铁 ↔ 有轨电车）才标换乘。
+    const fams = new Set(linesArr.map(lineFamily))
     const obj = {
       id,
       name: s.name,
       x: s.x,
       y: s.y,
       lines: linesArr,
-      isTransfer: linesArr.length > 1
+      isTransfer: fams.size > 1
     }
     const ov = cityOverrides[s.name]
     if (ov) obj.labelOverride = ov
