@@ -9,7 +9,7 @@
         </div>
         <div class="provider-body" v-if="providerOpen">
           <div
-            v-for="p in providers"
+            v-for="p in visibleProviders"
             :key="p.id"
             class="provider-item"
             :class="{ active: currentProvider === p.id }"
@@ -122,7 +122,9 @@ import { planRoute } from './lib/graph.js'
 const currentCity = ref('shenzhen')
 const currentProvider = ref('baidu')
 const providers = PROVIDERS
-const currentProviderName = computed(() => providers.find(p => p.id === currentProvider.value)?.name || '')
+// 隐藏「百度（真实坐标地理位置）」选项，后期需要时可移除此过滤
+const visibleProviders = computed(() => providers.filter(p => p.id !== 'baidu-geo'))
+const currentProviderName = computed(() => visibleProviders.value.find(p => p.id === currentProvider.value)?.name || '')
 const providerRef = ref(null)
 const providerOpen = ref(false)
 const notice = ref('')
