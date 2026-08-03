@@ -63,7 +63,8 @@
         :style="popupPosStyle"
         @click.stop
       >
-        <div class="popup-title">{{ popupStation.name }}</div>
+        <div class="popup-title" @click="copyStationName" title="点击复制站名">{{ popupStation.name }}</div>
+        <div class="popup-copy-tip" v-if="copied">已复制到剪贴板 ✓</div>
         <div class="popup-lines">
           <span
             v-for="ln in popupStation.lines"
@@ -206,6 +207,37 @@ const popupStationId = ref('')
 const popupPosStyle = ref({})
 const popupPlacement = ref('bottom') // 'top' or 'bottom'
 const popupStation = ref(null)
+const copied = ref(false)
+let copyTimer = null
+
+async function copyStationName() {
+  const name = popupStation.value?.name
+  if (!name) return
+  let ok = false
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(name)
+      ok = true
+    }
+  } catch (e) { /* 落到降级方案 */ }
+  if (!ok) {
+    // 降级：临时 textarea + execCommand（兼容非安全上下文 / 旧浏览器）
+    try {
+      const ta = document.createElement('textarea')
+      ta.value = name
+      ta.style.position = 'fixed'
+      ta.style.opacity = '0'
+      document.body.appendChild(ta)
+      ta.focus()
+      ta.select()
+      ok = document.execCommand('copy')
+      document.body.removeChild(ta)
+    } catch (e) { ok = false }
+  }
+  copied.value = ok
+  if (copyTimer) clearTimeout(copyTimer)
+  copyTimer = setTimeout(() => { copied.value = false }, 1500)
+}
 
 function lineColor(lineId) {
   return cityData.value?.lines?.find(l => l.id === lineId)?.color || '#666'
@@ -460,6 +492,17 @@ onCityChange('shenzhen')
   color: #1a1d24;
   text-align: center;
   margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+.popup-title:active {
+  opacity: 0.6;
+}
+.popup-copy-tip {
+  font-size: 11px;
+  color: #2e9e5b;
+  text-align: center;
+  margin-top: -4px;
 }
 .popup-lines {
   display: flex;

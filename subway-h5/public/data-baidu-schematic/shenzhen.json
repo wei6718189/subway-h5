@@ -841,7 +841,11 @@
         "9号线(梅林线)",
         "11号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "br",
+        "distance": "near"
+      }
     },
     "香蜜湖": {
       "id": "香蜜湖",
@@ -905,7 +909,11 @@
         "1号线(罗宝线)",
         "6号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "大剧院": {
       "id": "大剧院",
@@ -928,7 +936,11 @@
         "1号线(罗宝线)",
         "3号线(龙岗线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "国贸": {
       "id": "国贸",
@@ -1001,7 +1013,11 @@
         "2号线(8号线)",
         "13号线(石岩线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "湾厦": {
       "id": "湾厦",
@@ -1054,7 +1070,11 @@
         "2号线(8号线)",
         "13号线(石岩线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "红树湾": {
       "id": "红树湾",
@@ -1456,7 +1476,11 @@
         "3号线(龙岗线)",
         "16号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "南联": {
       "id": "南联",
@@ -1508,7 +1532,11 @@
         "14号线",
         "16号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "荷坳": {
       "id": "荷坳",
@@ -1600,7 +1628,11 @@
         "5号线(环中线)",
         "14号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "草埔": {
       "id": "草埔",
@@ -1829,7 +1861,11 @@
         "龙华有轨电车(新澜-清湖)",
         "龙华有轨电车(清湖-下围)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "龙华": {
       "id": "龙华",
@@ -2109,7 +2145,11 @@
         "5号线(环中线)",
         "7号线(西丽线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "留仙洞": {
       "id": "留仙洞",
@@ -2202,7 +2242,11 @@
         "5号线(环中线)",
         "9号线(梅林线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "前湾公园": {
       "id": "前湾公园",
@@ -2242,7 +2286,11 @@
       "lines": [
         "5号线(环中线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "松岗": {
       "id": "松岗",
@@ -2388,7 +2436,11 @@
         "6号线",
         "13号线(石岩线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "官田": {
       "id": "官田",
@@ -2491,7 +2543,11 @@
         "6号线支线",
         "13号线(石岩线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "虹桥公园": {
       "id": "虹桥公园",
@@ -2571,7 +2627,11 @@
       "lines": [
         "7号线(西丽线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "茶光": {
       "id": "茶光",
@@ -2795,7 +2855,11 @@
         "9号线(梅林线)",
         "12号线(南宝线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "南山书城": {
       "id": "南山书城",
@@ -2847,7 +2911,11 @@
         "9号线(梅林线)",
         "11号线"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "深湾": {
       "id": "深湾",
@@ -3822,7 +3890,11 @@
       "lines": [
         "13号线(石岩线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "沙田": {
       "id": "沙田",
@@ -3974,7 +4046,11 @@
       "lines": [
         "16号线"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "bot",
+        "distance": "near"
+      }
     },
     "安良": {
       "id": "安良",
@@ -4164,7 +4240,11 @@
       "lines": [
         "16号线"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "bl",
+        "distance": "near"
+      }
     },
     "新和": {
       "id": "新和",

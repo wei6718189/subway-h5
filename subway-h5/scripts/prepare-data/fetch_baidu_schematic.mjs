@@ -27,7 +27,28 @@ const LABEL_OVERRIDES = {
     '国展南': { position: 'bl', distance: 'near' },
     '沙井西': { position: 'bot', distance: 'near' },
     '福永': { position: 'right', distance: 'near' },
-    '桥头': { position: 'right', distance: 'near' }
+    '桥头': { position: 'right', distance: 'near' },
+    '西丽': { position: 'top', distance: 'near' },
+    '西丽湖': { position: 'top', distance: 'near' },
+    '车公庙': { position: 'br', distance: 'near' },
+    '园山西坑': { position: 'bot', distance: 'near' },
+    '坪山': { position: 'bl', distance: 'near' },
+    '双龙': { position: 'top', distance: 'near' },
+    '布吉': { position: 'right', distance: 'near' },
+    // —— 第二批调整 ——
+    '东角头': { position: 'right', distance: 'near' },
+    '南油': { position: 'right', distance: 'near' },
+    '科苑': { position: 'right', distance: 'near' },
+    '科学馆': { position: 'right', distance: 'near' },
+    '荔湾': { position: 'right', distance: 'near' },
+    '潮汐公园': { position: 'right', distance: 'near' },
+    '老街': { position: 'right', distance: 'near' },
+    '光明城': { position: 'right', distance: 'near' },
+    '红树湾南': { position: 'bot', distance: 'near' },
+    '上屋': { position: 'bot', distance: 'near' },
+    '前湾': { position: 'top', distance: 'near' },
+    '大运': { position: 'top', distance: 'near' },
+    '清湖': { position: 'top', distance: 'near' }
   },
   guangzhou: {}
 }
