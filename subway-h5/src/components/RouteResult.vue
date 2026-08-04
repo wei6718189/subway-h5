@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!routes || !routes.length" class="empty">输入起终点后点击「规划」查看换乘方案</div>
+  <div v-if="!routes || !routes.length" class="empty">输入起终点后或者点击站点选择后，点击「规划」查看换乘方案</div>
   <div v-else>
     <div class="plan-tabs">
       <button

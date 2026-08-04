@@ -2503,7 +2503,11 @@
         "6号线",
         "13号线(石岩线)"
       ],
-      "isTransfer": true
+      "isTransfer": true,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "长圳": {
       "id": "长圳",
@@ -3531,7 +3535,11 @@
       "lines": [
         "12号线(南宝线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "right",
+        "distance": "near"
+      }
     },
     "蚝乡": {
       "id": "蚝乡",
