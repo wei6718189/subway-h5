@@ -46,11 +46,19 @@
           <span class="more-arrow">{{ moreOpen ? '▼' : '▶' }}</span>
         </div>
         <div class="more-body" v-if="moreOpen">
+          <div class="more-item" v-if="currentCity === 'shenzhen'" @click.stop="openOfficialMap">官方地铁图</div>
           <div class="more-item" @click.stop="showAbout">关于</div>
           <div class="more-item" @click.stop="showHelp">说明</div>
         </div>
       </div>
     </div>
+
+    <!-- 官方地铁图查看器 -->
+    <OfficialMapViewer
+      :visible="officialMapOpen"
+      :url="officialMapUrl"
+      @close="officialMapOpen = false"
+    />
 
     <div class="notice" v-if="notice">{{ notice }}</div>
 
@@ -149,6 +157,7 @@ import SubwayMap from './components/SubwayMap.vue'
 import StationSearch from './components/StationSearch.vue'
 import RouteResult from './components/RouteResult.vue'
 import CitySwitcher from './components/CitySwitcher.vue'
+import OfficialMapViewer from './components/OfficialMapViewer.vue'
 import { loadCity, PROVIDERS, BAIDU_CITIES, CITIES } from './lib/loadData.js'
 import { planRoute } from './lib/graph.js'
 import { registerSW } from 'virtual:pwa-register'
@@ -288,6 +297,16 @@ function onDocClickProvider(e) {
 // 更多菜单
 const moreRef = ref(null)
 const moreOpen = ref(false)
+
+// 官方地铁图查看器
+const officialMapOpen = ref(false)
+// 深圳地铁官方线路图（深圳地铁官网高清图）
+const officialMapUrl = 'https://www.szmc.net/SMARTC/upload/image/20260630/1782803829923076269.png'
+
+function openOfficialMap() {
+  moreOpen.value = false
+  officialMapOpen.value = true
+}
 
 function toggleMore() {
   moreOpen.value = !moreOpen.value
