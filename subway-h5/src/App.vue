@@ -1,7 +1,7 @@
 <template>
   <div class="app">
     <div class="topbar">
-      <h1 v-show="false">地铁线路图</h1>
+      <h1>极简地铁图</h1>
       <div class="provider-select" ref="providerRef" v-show="false">
         <div class="provider-toggle" @click.stop="toggleProvider">
           <span>{{ currentProviderName }}</span>
