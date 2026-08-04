@@ -1181,7 +1181,7 @@ function zoomToStations(stationIds, opts = {}) {
   // 让路线在屏幕上占据 (visible - 2*padding) 区域；叠加在 fit 之上求所需 scale
   const scaleX = (rectW - padding * 2) / (w * fit)
   const scaleY = (visibleH - padding * 2) / (h * fit)
-  const targetScale = clamp(Math.min(scaleX, scaleY), 0.3, 8)
+  const targetScale = clamp(Math.min(scaleX, scaleY), 1, 10)
   const cx = (minX + maxX) / 2
   const cy = (minY + maxY) / 2
   // 水平居中到 svg 中心；垂直居中到“可见区域中心”（避开底部抽屉遮挡）
