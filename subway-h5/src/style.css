@@ -91,7 +91,8 @@ input {
   background: #ffffff;
   /* 顶栏/底栏已钉住，中间地图区域留出对应安全距离，不会被遮挡 */
   padding-top: calc(var(--safe-top) + 52px);
-  padding-bottom: calc(var(--safe-bottom) + var(--drawer-peek) + 10px);
+  /* 底部只让出抽屉收起时露出的 peek 区域（安全区已在 bottom-panel 的 padding-bottom 中处理，这里不再重复加） */
+  padding-bottom: calc(var(--drawer-peek) + 4px);
 }
 
 svg.map {
@@ -384,8 +385,8 @@ svg.map {
 .zoom-ctrl {
   position: fixed;
   right: 10px;
-  /* 固定在抽屉收起时露出区域上方 */
-  bottom: calc(var(--safe-bottom) + var(--drawer-peek) + 10px);
+  /* 固定在抽屉收起时露出区域上方（安全区已在 bottom-panel 中处理） */
+  bottom: calc(var(--drawer-peek) + 10px);
   display: flex;
   flex-direction: column;
   gap: 6px;
