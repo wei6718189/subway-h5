@@ -305,6 +305,9 @@ const officialMapUrl = 'https://www.szmc.net/SMARTC/upload/image/20260630/178280
 
 function openOfficialMap() {
   moreOpen.value = false
+  // 预加载图片：打开查看器前先预热，让 7MB 大图在后台下载，打开时更丝滑
+  const img = new Image()
+  img.src = officialMapUrl
   officialMapOpen.value = true
 }
 

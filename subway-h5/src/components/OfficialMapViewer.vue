@@ -12,7 +12,7 @@
       <div
         class="omv-stage"
         @touchstart="onTouchStart"
-        @touchmove.prevent="onTouchMove"
+        @touchmove="onTouchMove"
         @touchend="onTouchEnd"
         @wheel.prevent="onWheel"
         @mousedown="onMouseDown"
@@ -20,10 +20,17 @@
         @mouseup="onMouseUp"
         @mouseleave="onMouseUp"
       >
+        <!-- 加载占位 -->
+        <div v-if="loading" class="omv-loading">
+          <div class="omv-spinner"></div>
+          <span>图片加载中…</span>
+        </div>
+
         <img
           ref="imgRef"
           :src="url"
           class="omv-img"
+          :class="{ loaded: imgLoaded }"
           alt="深圳地铁官方线路图"
           draggable="false"
           :style="imgStyle"
@@ -54,7 +61,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 
 const props = defineProps({
   visible: { type: Boolean, default: false },
@@ -67,6 +74,8 @@ const scale = ref(1)
 const tx = ref(0)
 const ty = ref(0)
 const error = ref(false)
+const loading = ref(false)
+const imgLoaded = ref(false)
 const downloading = ref(false)
 const hint = ref('')
 let hintTimer = null
@@ -76,6 +85,15 @@ function showHint(msg) {
   if (hintTimer) clearTimeout(hintTimer)
   hintTimer = setTimeout(() => { hint.value = '' }, 3200)
 }
+
+// 打开时重置加载状态
+watch(() => props.visible, (v) => {
+  if (v) {
+    loading.value = true
+    imgLoaded.value = false
+    error.value = false
+  }
+})
 
 // 拖拽状态
 let dragging = false
@@ -93,9 +111,12 @@ const imgStyle = computed(() => ({
 
 function onImgLoad() {
   error.value = false
+  loading.value = false
+  imgLoaded.value = true
   reset()
 }
 function onImgError() {
+  loading.value = false
   error.value = true
 }
 
@@ -147,6 +168,8 @@ function onMouseUp() {
 }
 
 // ---- 触摸拖拽 + 双指缩放（移动端） ----
+// 注意：不能无条件 @touchmove.prevent，否则会干扰 iOS 长按图片手势。
+// 只在真正拖拽/缩放时才阻止默认滚动。
 function onTouchStart(e) {
   const t = e.touches
   if (t.length === 1) {
@@ -164,6 +187,8 @@ function onTouchStart(e) {
 function onTouchMove(e) {
   const t = e.touches
   if (t.length === 1 && dragging) {
+    // 单指拖拽：阻止默认滚动
+    e.preventDefault()
     const dx = t[0].clientX - lastX
     const dy = t[0].clientY - lastY
     lastX = t[0].clientX
@@ -171,6 +196,8 @@ function onTouchMove(e) {
     tx.value += dx
     ty.value += dy
   } else if (t.length === 2) {
+    // 双指缩放：阻止默认
+    e.preventDefault()
     const dist = Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY)
     const ratio = dist / pinchDist
     // 围绕双指中点缩放
@@ -240,7 +267,7 @@ function openInNewTab() {
   z-index: 3000;
   display: flex;
   flex-direction: column;
-  touch-action: none;
+  /* 不能 touch-action:none，否则 iOS 长按图片手势会被禁用 */
   /* 不能全局 user-select:none，否则 iOS 长按图片不会弹出「存储图像」菜单 */
 }
 .omv-toolbar,
@@ -296,6 +323,9 @@ function openInNewTab() {
   align-items: center;
   justify-content: center;
   cursor: grab;
+  /* 允许 iOS 长按图片弹出系统菜单 */
+  -webkit-user-select: auto;
+  user-select: auto;
 }
 .omv-stage:active {
   cursor: grabbing;
@@ -306,9 +336,42 @@ function openInNewTab() {
   max-height: 90vh;
   object-fit: contain;
   transform-origin: center center;
-  transition: transform 0.08s ease-out;
-  /* 允许 iOS 长按弹出「存储图像」，因此不能 pointer-events:none */
+  transition: transform 0.08s ease-out, opacity 0.3s ease-out;
+  /* 允许 iOS 长按弹出「存储图像」：
+     - 不能 pointer-events:none
+     - 必须覆盖 body 的全局 user-select:none（否则 iOS 长按图片无系统菜单）
+     - -webkit-touch-callout: default 是 iOS 长按图片弹菜单的关键 */
   -webkit-user-drag: none;
+  -webkit-user-select: auto !important;
+  user-select: auto !important;
+  -webkit-touch-callout: default;
+  opacity: 0;
+}
+.omv-img.loaded {
+  opacity: 1;
+}
+
+.omv-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 13px;
+}
+.omv-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: omv-spin 0.8s linear infinite;
+}
+@keyframes omv-spin {
+  to { transform: rotate(360deg); }
 }
 
 .omv-controls {
