@@ -38,8 +38,8 @@
         />
       </div>
 
-      <!-- 长按保存提示 -->
-      <div class="omv-save-tip">💡 长按图片可保存高清原图</div>
+      <!-- 保存提示 -->
+      <div class="omv-save-tip">💡 长按图片可保存高清原图到相册</div>
 
       <!-- 底部缩放控制 -->
       <div class="omv-controls">
@@ -47,6 +47,7 @@
         <span class="omv-zoom-label">{{ Math.round(scale * 100) }}%</span>
         <button class="omv-btn" @click="zoomIn">＋</button>
         <button class="omv-btn" @click="reset">重置</button>
+        <button class="omv-btn" @click="openInNewTab">新窗口打开</button>
       </div>
 
       <!-- 加载失败提示 -->
@@ -158,8 +159,7 @@ function onMouseUp() {
 }
 
 // ---- 触摸拖拽 + 双指缩放（移动端） ----
-// 注意：不能无条件 @touchmove.prevent，否则会干扰 iOS 长按图片手势。
-// 只在真正拖拽/缩放时才阻止默认滚动。
+// 注意：不阻止非拖拽/缩放时的默认行为，以保留 iOS 长按图片弹出「存储图像」菜单。
 function onTouchStart(e) {
   const t = e.touches
   if (t.length === 1) {
@@ -205,6 +205,7 @@ function onTouchEnd() {
   pinchDist = 0
 }
 
+// 在新窗口/标签页打开原图：iOS PWA 会唤起 Safari 视图，可在该页面长按保存。
 function openInNewTab() {
   window.open(props.url, '_blank')
 }
@@ -293,7 +294,7 @@ function openInNewTab() {
   transition: transform 0.08s ease-out, opacity 0.3s ease-out;
   /* 允许 iOS 长按弹出「存储图像」：
      - 不能 pointer-events:none
-     - 必须覆盖 body 的全局 user-select:none（否则 iOS 长按图片无系统菜单）
+     - 必须覆盖 body 的全局 user-select:none
      - -webkit-touch-callout: default 是 iOS 长按图片弹菜单的关键 */
   -webkit-user-drag: none;
   -webkit-user-select: auto !important;
@@ -355,7 +356,6 @@ function openInNewTab() {
   min-width: 48px;
   text-align: center;
 }
-
 
 .omv-error {
   position: fixed;
