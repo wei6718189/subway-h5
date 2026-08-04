@@ -40,6 +40,9 @@
         <button class="omv-btn" @click="reset">重置</button>
       </div>
 
+      <!-- 操作提示 -->
+      <div v-if="hint" class="omv-hint">{{ hint }}</div>
+
       <!-- 加载失败提示 -->
       <div v-if="error" class="omv-error">
         <p>图片加载失败</p>
@@ -65,6 +68,14 @@ const tx = ref(0)
 const ty = ref(0)
 const error = ref(false)
 const downloading = ref(false)
+const hint = ref('')
+let hintTimer = null
+
+function showHint(msg) {
+  hint.value = msg
+  if (hintTimer) clearTimeout(hintTimer)
+  hintTimer = setTimeout(() => { hint.value = '' }, 3200)
+}
 
 // 拖拽状态
 let dragging = false
@@ -186,7 +197,7 @@ async function download() {
   if (downloading.value) return
   downloading.value = true
   try {
-    // 主方案：fetch + blob + a.download（CORS 允许时可用）
+    // 主方案：fetch + blob + a.download（需要服务器允许 CORS）
     const res = await fetch(props.url, { mode: 'cors' })
     if (!res.ok) throw new Error('fetch failed')
     const blob = await res.blob()
@@ -198,10 +209,19 @@ async function download() {
     a.click()
     document.body.removeChild(a)
     setTimeout(() => URL.revokeObjectURL(objectUrl), 5000)
+    showHint('已开始下载')
   } catch (e) {
-    // 降级：新窗口打开（iOS 用户可长按保存）
-    console.warn('下载降级为新窗口打开:', e)
-    openInNewTab()
+    // 跨域资源无 CORS 头，无法 fetch 下载：
+    // - iOS：Safari 会静默拦截异步 window.open，改为提示长按图片保存
+    // - Android：可打开新页面，长按保存
+    console.warn('跨域下载受限（服务器未返回 CORS 头）:', e)
+    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+    if (isIOS) {
+      showHint('浏览器限制无法直接下载，请长按图片保存到相册')
+    } else {
+      showHint('请在新页面中长按图片保存')
+      openInNewTab()
+    }
   } finally {
     downloading.value = false
   }
@@ -221,6 +241,10 @@ function openInNewTab() {
   display: flex;
   flex-direction: column;
   touch-action: none;
+  /* 不能全局 user-select:none，否则 iOS 长按图片不会弹出「存储图像」菜单 */
+}
+.omv-toolbar,
+.omv-controls {
   user-select: none;
   -webkit-user-select: none;
 }
@@ -283,7 +307,8 @@ function openInNewTab() {
   object-fit: contain;
   transform-origin: center center;
   transition: transform 0.08s ease-out;
-  pointer-events: none;
+  /* 允许 iOS 长按弹出「存储图像」，因此不能 pointer-events:none */
+  -webkit-user-drag: none;
 }
 
 .omv-controls {
@@ -301,6 +326,25 @@ function openInNewTab() {
   font-size: 13px;
   min-width: 48px;
   text-align: center;
+}
+
+.omv-hint {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.88);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  z-index: 20;
+  white-space: nowrap;
+  max-width: 88vw;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
 }
 
 .omv-error {
