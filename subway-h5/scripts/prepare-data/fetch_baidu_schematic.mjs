@@ -95,7 +95,10 @@ const LABEL_OVERRIDES = {
     // —— 第九批调整 ——
     '华强路': { position: 'top', distance: 'near' },
     '侨香': { position: 'top', distance: 'near' },
-    '安托山': { position: 'left', distance: 'near' }
+    '安托山': { position: 'left', distance: 'near' },
+    // —— 第十批调整 ——
+    '凤凰城': { position: 'right', distance: 'near' },
+    '沙蚝': { position: 'right', distance: 'near' }
   },
   guangzhou: {}
 }
