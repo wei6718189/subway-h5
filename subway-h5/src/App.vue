@@ -123,6 +123,12 @@
         />
       </div>
     </div>
+
+    <!-- PWA 更新提示横幅：发现新版本时显示，点击立即更新 -->
+    <div class="pwa-update-banner" v-if="showUpdate" @click="doUpdate">
+      <span class="pwa-update-text">发现新版本，点击更新</span>
+      <span class="pwa-update-btn">更新</span>
+    </div>
   </div>
 </template>
 
@@ -134,12 +140,29 @@ import RouteResult from './components/RouteResult.vue'
 import CitySwitcher from './components/CitySwitcher.vue'
 import { loadCity, PROVIDERS, BAIDU_CITIES, CITIES } from './lib/loadData.js'
 import { planRoute } from './lib/graph.js'
+import { registerSW } from 'virtual:pwa-register'
 
 const currentCity = ref('shenzhen')
 const currentProvider = ref('baidu')
 const drawerExpanded = ref(true)
 const panelRef = ref(null)
 const dragY = ref(0)
+
+// PWA 更新提示：发现新版本时弹出横幅，点击触发 SW 激活并刷新
+const showUpdate = ref(false)
+const updateSW = registerSW({
+  onNeedRefresh() {
+    showUpdate.value = true
+  },
+  onOfflineReady() {
+    // 应用已可离线使用，这里暂不需要提示
+  }
+})
+function doUpdate() {
+  showUpdate.value = false
+  // true = 立即激活 waiting 中的新 SW 并 reload
+  updateSW(true)
+}
 let drawerStartY = 0
 let drawerPanelH = 0
 const providers = PROVIDERS
@@ -676,6 +699,40 @@ onCityChange('shenzhen')
   border: 1px solid #ffd591;
   border-radius: 8px;
   color: #ad6800;
+  font-size: 13px;
+}
+
+.pwa-update-banner {
+  position: fixed;
+  top: calc(var(--safe-top) + 56px);
+  left: 12px;
+  right: 12px;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #1a73e8;
+  color: #fff;
+  border-radius: 10px;
+  font-size: 13px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.22);
+  cursor: pointer;
+  user-select: none;
+  animation: popIn 0.12s ease-out;
+}
+.pwa-update-text {
+  flex: 1;
+  min-width: 0;
+}
+.pwa-update-btn {
+  flex-shrink: 0;
+  padding: 5px 14px;
+  background: #fff;
+  color: #1a73e8;
+  border-radius: 7px;
+  font-weight: 600;
   font-size: 13px;
 }
 </style>
