@@ -153,7 +153,10 @@ const drawerStyle = computed(() => {
 const fastestSummary = computed(() => {
   const plan = route.value?.fastest
   if (!plan) return ''
-  return `${plan.duration}分 · ${plan.stops.length}站 · 换乘${plan.transfers}次`
+  const mins = Math.round((plan.totalSec || 0) / 60)
+  const stops = plan.stationCount || 0
+  const transfers = plan.transferCount || 0
+  return `${mins}分 · ${stops}站 · 换乘${transfers}次`
 })
 const providerRef = ref(null)
 const providerOpen = ref(false)
