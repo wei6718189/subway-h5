@@ -39,6 +39,17 @@
           </div>
         </div>
       </div>
+      <!-- 更多菜单 -->
+      <div class="more-select" ref="moreRef">
+        <div class="more-toggle" @click.stop="toggleMore">
+          <span>更多</span>
+          <span class="more-arrow">{{ moreOpen ? '▼' : '▶' }}</span>
+        </div>
+        <div class="more-body" v-if="moreOpen">
+          <div class="more-item" @click.stop="showAbout">关于</div>
+          <div class="more-item" @click.stop="showHelp">说明</div>
+        </div>
+      </div>
     </div>
 
     <div class="notice" v-if="notice">{{ notice }}</div>
@@ -274,6 +285,30 @@ function onDocClickProvider(e) {
   providerOpen.value = false
 }
 
+// 更多菜单
+const moreRef = ref(null)
+const moreOpen = ref(false)
+
+function toggleMore() {
+  moreOpen.value = !moreOpen.value
+}
+
+function onDocClickMore(e) {
+  if (!moreRef.value) return
+  if (moreRef.value.contains(e.target)) return
+  moreOpen.value = false
+}
+
+function showAbout() {
+  moreOpen.value = false
+  alert('地铁线路图 H5\n\n一个基于高德/百度地图数据的城市地铁线路查询工具。\n支持深圳、广州、南宁等城市。')
+}
+
+function showHelp() {
+  moreOpen.value = false
+  alert('使用说明\n\n1. 点击地图上的站点可查看详情、设为起点/终点\n2. 在底部搜索框输入站名可快速规划路线\n3. 点击「线路图例」可高亮某条线路\n4. 支持最快路线与最少换乘两种方案')
+}
+
 // 点击图例下拉框以外：
 // 1) 下拉框打开时 → 仅收起，保留高亮
 // 2) 下拉框已收起且有高亮 → 清除高亮
@@ -360,12 +395,14 @@ onMounted(() => {
   document.addEventListener('click', onGlobalClick, true)
   document.addEventListener('click', onDocClickLegend, true)
   document.addEventListener('click', onDocClickProvider, true)
+  document.addEventListener('click', onDocClickMore, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onGlobalClick, true)
   document.removeEventListener('click', onDocClickLegend, true)
   document.removeEventListener('click', onDocClickProvider, true)
+  document.removeEventListener('click', onDocClickMore, true)
 })
 
 function setAsStart() {
