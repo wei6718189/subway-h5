@@ -20,35 +20,38 @@
         </div>
       </div>
       <CitySwitcher :current="currentCity" @update:current="onCityChange" />
-      <!-- 线路图例 -->
-      <div class="legend" v-if="cityData" ref="legendRef">
-        <div class="legend-toggle" @click.stop="toggleLegend">
-          <span>线路图例</span>
-          <span class="legend-arrow">{{ legendOpen ? '▼' : '▶' }}</span>
-        </div>
-        <div class="legend-body" v-if="legendOpen">
-          <div
-            class="lg-item"
-            v-for="line in cityData.lines"
-            :key="'lg-' + line.id"
-            :class="{ active: highlightLineId === line.id }"
-            @click.stop="onLegendClickLine(line.id)"
-          >
-            <span class="lg-swatch" :style="{ background: line.color }"></span>
-            <span>{{ line.name }}</span>
+      <!-- 右侧组：线路图例 + 更多 -->
+      <div class="topbar-right">
+        <!-- 线路图例 -->
+        <div class="legend" v-if="cityData" ref="legendRef">
+          <div class="legend-toggle" @click.stop="toggleLegend">
+            <span>线路图例</span>
+            <span class="legend-arrow">{{ legendOpen ? '▼' : '▶' }}</span>
+          </div>
+          <div class="legend-body" v-if="legendOpen">
+            <div
+              class="lg-item"
+              v-for="line in cityData.lines"
+              :key="'lg-' + line.id"
+              :class="{ active: highlightLineId === line.id }"
+              @click.stop="onLegendClickLine(line.id)"
+            >
+              <span class="lg-swatch" :style="{ background: line.color }"></span>
+              <span>{{ line.name }}</span>
+            </div>
           </div>
         </div>
-      </div>
-      <!-- 更多菜单 -->
-      <div class="more-select" ref="moreRef">
-        <div class="more-toggle" @click.stop="toggleMore">
-          <span>更多</span>
-          <span class="more-arrow">{{ moreOpen ? '▼' : '▶' }}</span>
-        </div>
-        <div class="more-body" v-if="moreOpen">
-          <div class="more-item" v-if="currentCity === 'shenzhen'" @click.stop="openOfficialMap">官方地铁图</div>
-          <div class="more-item" @click.stop="showAbout">关于</div>
-          <div class="more-item" @click.stop="showHelp">说明</div>
+        <!-- 更多菜单 -->
+        <div class="more-select" ref="moreRef">
+          <div class="more-toggle" @click.stop="toggleMore">
+            <span>更多</span>
+            <span class="more-arrow">{{ moreOpen ? '▼' : '▶' }}</span>
+          </div>
+          <div class="more-body" v-if="moreOpen">
+            <div class="more-item" v-if="currentCity === 'shenzhen'" @click.stop="openOfficialMap">官方地铁图</div>
+            <div class="more-item" @click.stop="showAbout">关于</div>
+            <div class="more-item" @click.stop="showHelp">说明</div>
+          </div>
         </div>
       </div>
     </div>
@@ -103,6 +106,33 @@
         </div>
         <!-- 小箭头：指向站点 -->
         <div class="popup-arrow" :class="popupPlacement"></div>
+      </div>
+    </Teleport>
+
+    <!-- 关于 / 说明 弹窗（毛玻璃白底） -->
+    <Teleport to="body">
+      <div v-if="modalType" class="modal-overlay" @click.self="closeModal">
+        <div class="modal-card">
+          <div class="modal-head">
+            <span class="modal-title">{{ modalType === 'about' ? '关于' : '使用说明' }}</span>
+            <button class="modal-close" @click="closeModal" title="关闭">✕</button>
+          </div>
+          <div class="modal-body">
+            <template v-if="modalType === 'about'">
+              <p class="modal-lead">地铁线路图 H5</p>
+              <p class="modal-dim">一个基于高德 / 百度地图数据的城市地铁线路查询工具。</p>
+              <p class="modal-dim">支持深圳、广州、南宁等城市。</p>
+            </template>
+            <template v-else>
+              <ol class="modal-list">
+                <li>点击地图上的站点可查看详情、设为起点 / 终点</li>
+                <li>在底部搜索框输入站名可快速规划路线</li>
+                <li>点击「线路图例」可高亮某条线路</li>
+                <li>支持最快路线与最少换乘两种方案</li>
+              </ol>
+            </template>
+          </div>
+        </div>
       </div>
     </Teleport>
 
@@ -321,14 +351,18 @@ function onDocClickMore(e) {
   moreOpen.value = false
 }
 
+// 关于 / 说明 弹窗：用自定义毛玻璃弹窗替代原生 alert（背景色统一为毛玻璃白底）
+const modalType = ref(null) // null | 'about' | 'help'
 function showAbout() {
   moreOpen.value = false
-  alert('地铁线路图 H5\n\n一个基于高德/百度地图数据的城市地铁线路查询工具。\n支持深圳、广州、南宁等城市。')
+  modalType.value = 'about'
 }
-
 function showHelp() {
   moreOpen.value = false
-  alert('使用说明\n\n1. 点击地图上的站点可查看详情、设为起点/终点\n2. 在底部搜索框输入站名可快速规划路线\n3. 点击「线路图例」可高亮某条线路\n4. 支持最快路线与最少换乘两种方案')
+  modalType.value = 'help'
+}
+function closeModal() {
+  modalType.value = null
 }
 
 // 点击图例下拉框以外：
@@ -820,5 +854,74 @@ onCityChange('shenzhen')
   border-radius: 7px;
   font-weight: 600;
   font-size: 13px;
+}
+
+/* 关于 / 说明 弹窗：毛玻璃白底 */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 24px;
+}
+.modal-card {
+  width: 100%;
+  max-width: 340px;
+  background: rgba(255, 255, 255, 0.78);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 14px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+  animation: popIn 0.14s ease-out;
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+.modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1d24;
+}
+.modal-close {
+  font-size: 16px;
+  color: #5f6368;
+  line-height: 1;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+.modal-close:active {
+  background: rgba(0, 0, 0, 0.06);
+}
+.modal-body {
+  padding: 16px;
+  color: #1a1d24;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.modal-body p {
+  margin: 0 0 8px;
+}
+.modal-lead {
+  font-weight: 600;
+  font-size: 15px;
+}
+.modal-dim {
+  color: #5f6368;
+}
+.modal-list {
+  margin: 0;
+  padding-left: 20px;
+}
+.modal-list li {
+  margin-bottom: 6px;
 }
 </style>

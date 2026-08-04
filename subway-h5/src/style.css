@@ -264,14 +264,21 @@ svg.map {
 }
 .city-select:focus { border-color: var(--accent); }
 
-/* 线路图例（在 topbar 中并排显示，靠右对齐） */
-.legend {
-  position: relative;
-  flex-shrink: 0;
+/* 右侧组：线路图例 + 更多，整体推到顶部最右侧 */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
 }
 
-/* 更多菜单 */
+/* 线路图例（在 topbar 右组中并排显示） */
+.legend {
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* 更多菜单（在 topbar 右组中，与线路图例相邻） */
 .more-select {
   position: relative;
   flex-shrink: 0;
@@ -301,8 +308,10 @@ svg.map {
   right: 0;
   margin-top: 4px;
   min-width: 120px;
-  background: #ffffff;
-  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
   padding: 4px;
@@ -350,8 +359,10 @@ svg.map {
   min-width: 160px;
   max-height: 50vh;
   overflow-y: auto;
-  background: #ffffff;
-  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 8px;
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
   padding: 4px;

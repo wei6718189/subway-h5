@@ -4,7 +4,6 @@
       <!-- 顶部工具栏 -->
       <div class="omv-toolbar">
         <span class="omv-title">深圳地铁官方线路图</span>
-        <button class="omv-btn" @click="download" title="下载到本地">⬇ 下载</button>
         <button class="omv-btn" @click="close" title="关闭">✕</button>
       </div>
 
@@ -39,6 +38,9 @@
         />
       </div>
 
+      <!-- 长按保存提示 -->
+      <div class="omv-save-tip">💡 长按图片可保存高清原图</div>
+
       <!-- 底部缩放控制 -->
       <div class="omv-controls">
         <button class="omv-btn" @click="zoomOut">−</button>
@@ -46,9 +48,6 @@
         <button class="omv-btn" @click="zoomIn">＋</button>
         <button class="omv-btn" @click="reset">重置</button>
       </div>
-
-      <!-- 操作提示 -->
-      <div v-if="hint" class="omv-hint">{{ hint }}</div>
 
       <!-- 加载失败提示 -->
       <div v-if="error" class="omv-error">
@@ -76,15 +75,6 @@ const ty = ref(0)
 const error = ref(false)
 const loading = ref(false)
 const imgLoaded = ref(false)
-const downloading = ref(false)
-const hint = ref('')
-let hintTimer = null
-
-function showHint(msg) {
-  hint.value = msg
-  if (hintTimer) clearTimeout(hintTimer)
-  hintTimer = setTimeout(() => { hint.value = '' }, 3200)
-}
 
 // 打开时重置加载状态
 watch(() => props.visible, (v) => {
@@ -215,45 +205,6 @@ function onTouchEnd() {
   pinchDist = 0
 }
 
-// ---- 下载 ----
-function fileName() {
-  return '深圳地铁官方线路图.jpg'
-}
-
-async function download() {
-  if (downloading.value) return
-  downloading.value = true
-  try {
-    // 主方案：fetch + blob + a.download（需要服务器允许 CORS）
-    const res = await fetch(props.url, { mode: 'cors' })
-    if (!res.ok) throw new Error('fetch failed')
-    const blob = await res.blob()
-    const objectUrl = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = objectUrl
-    a.download = fileName()
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(objectUrl), 5000)
-    showHint('已开始下载')
-  } catch (e) {
-    // 跨域资源无 CORS 头，无法 fetch 下载：
-    // - iOS：Safari 会静默拦截异步 window.open，改为提示长按图片保存
-    // - Android：可打开新页面，长按保存
-    console.warn('跨域下载受限（服务器未返回 CORS 头）:', e)
-    const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
-    if (isIOS) {
-      showHint('浏览器限制无法直接下载，请长按图片保存到相册')
-    } else {
-      showHint('请在新页面中长按图片保存')
-      openInNewTab()
-    }
-  } finally {
-    downloading.value = false
-  }
-}
-
 function openInNewTab() {
   window.open(props.url, '_blank')
 }
@@ -263,7 +214,10 @@ function openInNewTab() {
 .omv-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  /* 半透明浅色 + 毛玻璃，避免纯黑压屏；页面背景会透出一点点 */
+  background: rgba(20, 22, 28, 0.5);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   z-index: 3000;
   display: flex;
   flex-direction: column;
@@ -282,7 +236,7 @@ function openInNewTab() {
   align-items: center;
   gap: 8px;
   padding: calc(var(--safe-top, 0px) + 10px) 12px 10px;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.4);
   border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 .omv-title {
@@ -351,6 +305,17 @@ function openInNewTab() {
   opacity: 1;
 }
 
+.omv-save-tip {
+  flex-shrink: 0;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 12.5px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.1);
+  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
 .omv-loading {
   position: absolute;
   inset: 0;
@@ -381,7 +346,7 @@ function openInNewTab() {
   justify-content: center;
   gap: 10px;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.4);
   border-top: 1px solid rgba(255, 255, 255, 0.12);
 }
 .omv-zoom-label {
@@ -391,24 +356,6 @@ function openInNewTab() {
   text-align: center;
 }
 
-.omv-hint {
-  position: fixed;
-  bottom: 84px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.88);
-  color: #fff;
-  padding: 10px 18px;
-  border-radius: 10px;
-  font-size: 13px;
-  z-index: 20;
-  white-space: nowrap;
-  max-width: 88vw;
-  text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
-  pointer-events: none;
-}
 
 .omv-error {
   position: fixed;
