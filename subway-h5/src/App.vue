@@ -39,6 +39,17 @@
           </div>
         </div>
       </div>
+      <!-- 更多菜单 -->
+      <div class="more-select" ref="moreRef">
+        <div class="more-toggle" @click.stop="toggleMore">
+          <span>更多</span>
+          <span class="more-arrow">{{ moreOpen ? '▼' : '▶' }}</span>
+        </div>
+        <div class="more-body" v-if="moreOpen">
+          <div class="more-item" @click.stop="showAbout">关于</div>
+          <div class="more-item" @click.stop="showHelp">说明</div>
+        </div>
+      </div>
     </div>
 
     <div class="notice" v-if="notice">{{ notice }}</div>
@@ -148,11 +159,24 @@ const drawerExpanded = ref(true)
 const panelRef = ref(null)
 const dragY = ref(0)
 
+// iOS 已安装 PWA（standalone）不会自动应用 waiting 中的新 SW，也不会主动检查更新；
+// 需要我们在「启动 / 从后台回到前台」时主动触发更新检查。
+const isIOS = /iP(hone|ad|od)/.test(navigator.userAgent)
+const isStandalone =
+  window.navigator.standalone === true ||
+  window.matchMedia('(display-mode: standalone)').matches
+const isIOSStandalone = isIOS && isStandalone
+
 // PWA 更新提示：发现新版本时弹出横幅，点击触发 SW 激活并刷新
 const showUpdate = ref(false)
 const updateSW = registerSW({
   onNeedRefresh() {
-    showUpdate.value = true
+    if (isIOSStandalone) {
+      // iOS 台标 PWA 直接自动激活并刷新，避免依赖用户手动点横幅（iOS 不会自动应用 waiting SW）
+      updateSW()
+    } else {
+      showUpdate.value = true
+    }
   },
   onOfflineReady() {
     // 应用已可离线使用，这里暂不需要提示
@@ -162,6 +186,20 @@ function doUpdate() {
   showUpdate.value = false
   // true = 立即激活 waiting 中的新 SW 并 reload
   updateSW(true)
+}
+
+// iOS standalone：在启动及从后台切回前台时主动拉取新 SW（iOS 自身不主动检查更新）
+if (isIOSStandalone) {
+  const checkUpdate = () => updateSW()
+  // iOS 把 PWA 切到后台再切回前台会触发 pageshow（persisted=true），这是最可靠的更新时机
+  window.addEventListener('pageshow', (e) => {
+    if (e.persisted) checkUpdate()
+  })
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') checkUpdate()
+  })
+  // 初次进入也检查一次，确保 SW 注册完成后触发更新检测
+  setTimeout(checkUpdate, 1500)
 }
 let drawerStartY = 0
 let drawerPanelH = 0
@@ -245,6 +283,30 @@ function onDocClickProvider(e) {
   if (!providerRef.value) return
   if (providerRef.value.contains(e.target)) return
   providerOpen.value = false
+}
+
+// 更多菜单
+const moreRef = ref(null)
+const moreOpen = ref(false)
+
+function toggleMore() {
+  moreOpen.value = !moreOpen.value
+}
+
+function onDocClickMore(e) {
+  if (!moreRef.value) return
+  if (moreRef.value.contains(e.target)) return
+  moreOpen.value = false
+}
+
+function showAbout() {
+  moreOpen.value = false
+  alert('地铁线路图 H5\n\n一个基于高德/百度地图数据的城市地铁线路查询工具。\n支持深圳、广州、南宁等城市。')
+}
+
+function showHelp() {
+  moreOpen.value = false
+  alert('使用说明\n\n1. 点击地图上的站点可查看详情、设为起点/终点\n2. 在底部搜索框输入站名可快速规划路线\n3. 点击「线路图例」可高亮某条线路\n4. 支持最快路线与最少换乘两种方案')
 }
 
 // 点击图例下拉框以外：
@@ -333,12 +395,14 @@ onMounted(() => {
   document.addEventListener('click', onGlobalClick, true)
   document.addEventListener('click', onDocClickLegend, true)
   document.addEventListener('click', onDocClickProvider, true)
+  document.addEventListener('click', onDocClickMore, true)
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', onGlobalClick, true)
   document.removeEventListener('click', onDocClickLegend, true)
   document.removeEventListener('click', onDocClickProvider, true)
+  document.removeEventListener('click', onDocClickMore, true)
 })
 
 function setAsStart() {

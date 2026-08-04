@@ -251,7 +251,6 @@ svg.map {
 
 /* 城市下拉框 */
 .city-select {
-  margin-left: auto;
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -265,10 +264,64 @@ svg.map {
 }
 .city-select:focus { border-color: var(--accent); }
 
-/* 线路图例（在 topbar 中并排显示） */
+/* 线路图例（在 topbar 中并排显示，靠右对齐） */
 .legend {
   position: relative;
   flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* 更多菜单 */
+.more-select {
+  position: relative;
+  flex-shrink: 0;
+}
+.more-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  user-select: none;
+  white-space: nowrap;
+}
+.more-arrow {
+  font-size: 9px;
+  color: var(--text-dim);
+}
+.more-body {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  min-width: 120px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  padding: 4px;
+  z-index: 50;
+}
+.more-item {
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 13px;
+  color: var(--text);
+}
+.more-item:hover {
+  background: #eef0f3;
+}
+.more-item:active {
+  background: #e8f0fe;
+  color: #1a73e8;
 }
 .legend-toggle {
   display: flex;
