@@ -138,16 +138,15 @@
 
     <div
       class="bottom-panel"
-      :class="drawerExpanded ? 'expanded' : 'collapsed'"
       :style="drawerStyle"
       ref="panelRef"
     >
       <div
         class="drawer-handle"
-        @click="toggleDrawer"
-        @touchstart="onHandleTouchStart"
-        @touchmove.prevent="onHandleTouchMove"
-        @touchend="onHandleTouchEnd"
+        @pointerdown="onHandlePointerDown"
+        @pointermove="onDragMove"
+        @pointerup="onDragEnd"
+        @pointercancel="onDragEnd"
       >
         <div class="drawer-bar"></div>
         <div v-if="!drawerExpanded && fastestSummary" class="drawer-peek-text">{{ fastestSummary }}</div>
@@ -158,6 +157,7 @@
         :city-data="cityData"
         v-model:startId="startId"
         v-model:endId="endId"
+        :drawer-expanded="drawerExpanded"
         @plan="onPlan"
         @clear="onClearRoute"
         @select-station="onPopupSelect"
@@ -194,9 +194,32 @@ import { registerSW } from 'virtual:pwa-register'
 
 const currentCity = ref('shenzhen')
 const currentProvider = ref('baidu')
-const drawerExpanded = ref(true)
+const drawerExpanded = ref(false) // 默认收在底部(peek)；点击横杠 → 恢复到 savedHeight(上一次高度/默认屏高50%)；再点收回底部
 const panelRef = ref(null)
-const dragY = ref(0)
+const drawerHeight = ref(0) // 当前渲染高度(px)，上限为屏幕高度一半
+const savedHeight = ref(0) // 记住的"上一次展开高度"，点击横杠展开时恢复
+const dragTransition = ref(false) // 拖拽过程中关闭过渡，松手后恢复
+const PEEK = ref(76)
+const MAX_DRAWER_H = ref(0)
+let dragStartY = 0
+let dragStartHeight = 0
+let dragging = false
+let userSetHeight = false
+
+function recalcDrawerBounds() {
+  const vh = window.innerHeight || 800
+  MAX_DRAWER_H.value = Math.round(vh * 0.5) // 拖拽上限：屏幕中间
+  PEEK.value = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--drawer-peek')) || 76
+  if (!userSetHeight) {
+    // 默认展开高度：屏高的 50%（即屏幕中间）
+    savedHeight.value = MAX_DRAWER_H.value
+    drawerHeight.value = savedHeight.value
+    userSetHeight = true
+  } else {
+    savedHeight.value = Math.max(PEEK.value, Math.min(savedHeight.value, MAX_DRAWER_H.value))
+    drawerHeight.value = Math.max(PEEK.value, Math.min(drawerHeight.value, MAX_DRAWER_H.value))
+  }
+}
 
 // iOS 已安装 PWA（standalone）不会自动应用 waiting 中的新 SW，也不会主动检查更新；
 // 需要我们在「启动 / 从后台回到前台」时主动触发更新检查。
@@ -240,15 +263,17 @@ if (isIOSStandalone) {
   // 初次进入也检查一次，确保 SW 注册完成后触发更新检测
   setTimeout(checkUpdate, 1500)
 }
-let drawerStartY = 0
-let drawerPanelH = 0
 const providers = PROVIDERS
 // 隐藏「百度（真实坐标地理位置）」选项，后期需要时可移除此过滤
 const visibleProviders = computed(() => providers.filter(p => p.id !== 'baidu-geo'))
 const currentProviderName = computed(() => visibleProviders.value.find(p => p.id === currentProvider.value)?.name || '')
 const drawerStyle = computed(() => {
-  if (!drawerExpanded.value || dragY.value <= 0) return {}
-  return { transform: `translateY(${dragY.value}px)` }
+  // 展开 → drawerHeight；收起 → peek。拖拽过程中关闭过渡，松手后由 CSS 恢复弹簧动画
+  const h = drawerExpanded.value ? drawerHeight.value : PEEK.value
+  return {
+    height: `${h}px`,
+    transition: dragTransition.value ? 'none' : ''
+  }
 })
 const fastestSummary = computed(() => {
   const plan = route.value?.fastest
@@ -448,6 +473,8 @@ function onGlobalClick(e) {
 }
 
 onMounted(() => {
+  recalcDrawerBounds()
+  window.addEventListener('resize', recalcDrawerBounds)
   document.addEventListener('click', onGlobalClick, true)
   document.addEventListener('click', onDocClickLegend, true)
   document.addEventListener('click', onDocClickProvider, true)
@@ -624,33 +651,51 @@ function onClearRoute() {
 }
 
 function toggleDrawer() {
+  // 点击横杠：在「收起(peek)」与「展开(上次记住的高度)」之间切换
   drawerExpanded.value = !drawerExpanded.value
-  dragY.value = 0
 }
 
-function onHandleTouchStart(e) {
-  drawerStartY = e.touches[0].clientY
-  drawerPanelH = panelRef.value?.offsetHeight || 0
-  dragY.value = 0
+function onHandlePointerDown(e) {
+  dragging = true
+  dragTransition.value = false // 拖拽时关闭过渡，避免跟手延迟
+  dragStartY = e.clientY
+  // 拖拽起点基准：展开态从"记住的高度"起；收起态从 peek 起（向上拖即展开）。
+  // 注意：这里不能把 drawerHeight 直接覆盖成 dragStartHeight，否则收起态点击会把
+  // 渲染高度误写成 peek，导致"再次点击恢复上次高度"失效。
+  dragStartHeight = drawerExpanded.value ? savedHeight.value : PEEK.value
+  try { e.currentTarget.setPointerCapture(e.pointerId) } catch (_) {}
 }
 
-function onHandleTouchMove(e) {
-  if (!drawerExpanded.value) return
-  const dy = e.touches[0].clientY - drawerStartY
-  if (dy > 0) {
-    // 拖动距离不超过收起后露出的高度，避免拉过头
-    const maxDy = Math.max(0, drawerPanelH - 76)
-    dragY.value = Math.min(dy, maxDy)
+function onDragMove(e) {
+  if (!dragging) return
+  const dy = e.clientY - dragStartY
+  // 手指上移(dy<0) → 高度增加；下移(dy>0) → 高度减少
+  let h = dragStartHeight - dy
+  h = Math.max(PEEK.value, Math.min(h, MAX_DRAWER_H.value))
+  drawerHeight.value = h
+  drawerExpanded.value = true // 拖拽即视为展开到该高度
+}
+
+function onDragEnd(e) {
+  if (!dragging) return
+  dragging = false
+  dragTransition.value = true // 松手恢复弹簧动画
+  const dy = e.clientY - dragStartY
+  // 几乎没移动 = 点击：在「收起(底部)」与「展开(上次记住高度)」之间切换
+  if (Math.abs(dy) < 6) {
+    // 从收起态点开时，先把渲染高度恢复到"记住的高度"，再切换为展开
+    if (!drawerExpanded.value) {
+      drawerHeight.value = savedHeight.value
+    }
+    toggleDrawer()
+    return
   }
-}
-
-function onHandleTouchEnd(e) {
-  const dy = e.changedTouches[0].clientY - drawerStartY
-  const threshold = Math.max(40, drawerPanelH * 0.2)
-  if (drawerExpanded.value && dy > threshold) {
+  // 真实拖拽：把当前高度记为"上一次高度"，下次点击恢复它
+  savedHeight.value = drawerHeight.value
+  // 拖到接近 peek → 收起
+  if (drawerHeight.value <= PEEK.value + 24) {
     drawerExpanded.value = false
   }
-  dragY.value = 0
 }
 
 onCityChange('shenzhen')

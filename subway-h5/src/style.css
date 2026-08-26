@@ -114,22 +114,13 @@ svg.map {
   z-index: 30;
   display: flex;
   flex-direction: column;
-  max-height: 55vh;
-  min-height: 180px;
+  max-height: 50vh;
   overflow: visible;
   min-width: 0;
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -2px 16px rgba(0, 0, 0, 0.08);
-  transform: translateY(calc(100% - var(--drawer-peek)));
-  transition: transform 0.25s cubic-bezier(0.25, 1, 0.5, 1);
-}
-
-.bottom-panel.expanded {
-  transform: translateY(0);
-}
-
-.bottom-panel.collapsed {
-  transform: translateY(calc(100% - var(--drawer-peek)));
+  height: var(--drawer-peek);
+  transition: height 0.25s cubic-bezier(0.25, 1, 0.5, 1);
 }
 
 .drawer-handle {
