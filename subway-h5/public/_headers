@@ -15,8 +15,12 @@
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
 
-# JSON 数据 - 中等缓存
-/data/*
+# JSON 数据 - 中等缓存（覆盖改名后的三个数据源目录）
+/data-amap/*
+  Cache-Control: public, max-age=3600
+/data-baidu/*
+  Cache-Control: public, max-age=3600
+/data-baidu-schematic/*
   Cache-Control: public, max-age=3600
 
 # 图标 - 长缓存
