@@ -1,12 +1,13 @@
 name = "subway-h5"
 compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "DB"
 database_name = "subway-h5-db"
 # database_id 需通过 `wrangler d1 create subway-h5-db` 创建后填入；
 # 本地开发可用 `wrangler d1 create subway-h5-db --local` 建本地库，并配合
-# `wrangler pages dev --d1 DB=subway-h5-db dist` 启动带 D1 的本地预览。
+# `wrangler pages dev --d1 DB=subway-h5-db` 启动带 D1 的本地预览（pages_build_output_dir 已配置 dist）。
 database_id = "4f432123-e15a-42ec-bf55-c4124d0b8261"
 
 [vars]
