@@ -1,0 +1,14 @@
+name = "subway-h5"
+compatibility_date = "2024-09-23"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "subway-h5-db"
+# database_id 需通过 `wrangler d1 create subway-h5-db` 创建后填入；
+# 本地开发可用 `wrangler d1 create subway-h5-db --local` 建本地库，并配合
+# `wrangler pages dev --d1 DB=subway-h5-db dist` 启动带 D1 的本地预览。
+database_id = "4f432123-e15a-42ec-bf55-c4124d0b8261"
+
+[vars]
+# 仅开发演示用，生产请在 Cloudflare 后台（Pages → Settings → Environment variables）配置覆盖，不要提交真实密码。
+ADMIN_PASSWORD = "123456"

@@ -49,6 +49,7 @@
           </div>
           <div class="more-body" v-if="moreOpen">
             <div class="more-item" v-if="currentCity === 'shenzhen'" @click.stop="openOfficialMap">官方地铁图</div>
+            <div class="more-item" @click.stop="openGuestbook">留言</div>
             <div class="more-item" @click.stop="showAbout">关于</div>
             <div class="more-item" @click.stop="showHelp">说明</div>
           </div>
@@ -368,6 +369,12 @@ function openOfficialMap() {
 
 function toggleMore() {
   moreOpen.value = !moreOpen.value
+}
+
+// 留言板：独立静态页，直接跳转
+function openGuestbook() {
+  moreOpen.value = false
+  window.location.href = '/guestbook.html'
 }
 
 function onDocClickMore(e) {
