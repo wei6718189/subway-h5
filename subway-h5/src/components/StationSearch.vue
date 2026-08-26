@@ -21,54 +21,59 @@
       <button class="btn plan-btn" :disabled="!canPlan" @click="$emit('plan')">规划</button>
       <button class="btn clear-btn" :disabled="!hasRoute" @click="onClear" title="清除">清除</button>
     </div>
-    <!-- 搜索补全下拉：直接定位在输入框下方，类似原生下拉框 -->
-    <div v-if="active === 'start' && startResults.length" class="datalist">
-      <div
-        class="item"
-        v-for="r in startResults"
-        :key="r.id"
-        @click="pick('start', r)"
-      >
-        <span class="station-name">{{ r.name }}</span>
-        <span class="badges">
-          <span
-            v-for="ln in r.lines"
-            :key="ln"
-            class="line-badge"
-            :style="lineStyle(ln)"
-          >{{ shortLineName(ln) }}</span>
-        </span>
+    <!-- 搜索补全下拉：Teleport 到 body 并 fixed 定位（脱离抽屉 overflow，且 z-index 高于抽屉），可见期间由 rAF 循环持续锚定到搜索框下方 -->
+    <Teleport to="body" v-if="active === 'start' && startResults.length">
+      <div ref="startListRef" class="datalist" :style="datalistStyle">
+        <div
+          class="item"
+          v-for="r in startResults"
+          :key="r.id"
+          @click="pick('start', r)"
+        >
+          <span class="station-name">{{ r.name }}</span>
+          <span class="badges">
+            <span
+              v-for="ln in r.lines"
+              :key="ln"
+              class="line-badge"
+              :style="lineStyle(ln)"
+            >{{ shortLineName(ln) }}</span>
+          </span>
+        </div>
       </div>
-    </div>
-    <div v-if="active === 'end' && endResults.length" class="datalist">
-      <div
-        class="item"
-        v-for="r in endResults"
-        :key="r.id"
-        @click="pick('end', r)"
-      >
-        <span class="station-name">{{ r.name }}</span>
-        <span class="badges">
-          <span
-            v-for="ln in r.lines"
-            :key="ln"
-            class="line-badge"
-            :style="lineStyle(ln)"
-          >{{ shortLineName(ln) }}</span>
-        </span>
+    </Teleport>
+    <Teleport to="body" v-if="active === 'end' && endResults.length">
+      <div ref="endListRef" class="datalist" :style="datalistStyle">
+        <div
+          class="item"
+          v-for="r in endResults"
+          :key="r.id"
+          @click="pick('end', r)"
+        >
+          <span class="station-name">{{ r.name }}</span>
+          <span class="badges">
+            <span
+              v-for="ln in r.lines"
+              :key="ln"
+              class="line-badge"
+              :style="lineStyle(ln)"
+            >{{ shortLineName(ln) }}</span>
+          </span>
+        </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, Teleport, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { searchStations } from '../lib/loadData.js'
 
 const props = defineProps({
   cityData: { type: Object, default: null },
   startId: { type: String, default: '' },
-  endId: { type: String, default: '' }
+  endId: { type: String, default: '' },
+  drawerExpanded: { type: Boolean, default: true }
 })
 const emit = defineEmits(['update:startId', 'update:endId', 'plan', 'clear', 'select-station'])
 
@@ -80,7 +85,67 @@ const endResults = ref([])
 const containerRef = ref(null)
 const startInputRef = ref(null)
 const endInputRef = ref(null)
+const startListRef = ref(null)
+const endListRef = ref(null)
+const datalistStyle = ref({})
 let skipNextWatch = false
+let rafId = null
+
+function updateDatalistStyle() {
+  if (!containerRef.value || !active.value) {
+    datalistStyle.value = {}
+    return
+  }
+  const rect = containerRef.value.getBoundingClientRect()
+  const vh = window.innerHeight
+  const wantH = 220 // 期望最大高度
+  const gap = 4
+  const belowSpace = vh - rect.bottom - gap // 搜索框下方可用空间
+  const aboveSpace = rect.top - gap // 搜索框上方可用空间
+  // 下方放不下且上方更宽 → 向上翻转展开，避免抽屉收在底部时下拉被挤出屏幕
+  const placeAbove = belowSpace < wantH && aboveSpace > belowSpace
+  let top, bottom, maxH
+  if (placeAbove) {
+    maxH = Math.max(60, Math.min(wantH, aboveSpace))
+    top = 'auto'
+    bottom = `${vh - rect.top + gap}px`
+  } else {
+    maxH = Math.max(60, Math.min(wantH, belowSpace))
+    top = `${rect.bottom + gap}px`
+    bottom = 'auto'
+  }
+  datalistStyle.value = {
+    position: 'fixed',
+    left: `${rect.left}px`,
+    top,
+    bottom,
+    width: `${rect.width}px`,
+    maxHeight: `${maxH}px`,
+    zIndex: '100',
+    overflowY: 'auto'
+  }
+}
+
+function scheduleUpdate() {
+  if (rafId) return
+  rafId = requestAnimationFrame(() => {
+    rafId = null
+    updateDatalistStyle()
+  })
+}
+
+function onDocPointerDown(e) {
+  const target = e.target
+  const inside =
+    containerRef.value?.contains(target) ||
+    startListRef.value?.contains(target) ||
+    endListRef.value?.contains(target)
+  if (!inside) {
+    active.value = ''
+    startResults.value = []
+    endResults.value = []
+  }
+}
 
 const hasRoute = computed(() => !!(props.startId || props.endId))
 
@@ -182,6 +247,57 @@ watch(() => props.cityData, () => {
   emit('update:startId', '')
   emit('update:endId', '')
   active.value = 'start'
+})
+
+watch([active, startResults, endResults], () => {
+  nextTick(updateDatalistStyle)
+}, { flush: 'post' })
+
+// 抽屉拖拽 / 展开收起动画会让搜索框实时上下移动；下拉若是某一刻的固定坐标就会"飘"。
+// 下拉可见期间用 rAF 循环持续锚定到搜索框正下方，彻底消除漂移（静止时循环已停止，无额外开销）。
+const listVisible = computed(() =>
+  (active.value === 'start' && startResults.value.length > 0) ||
+  (active.value === 'end' && endResults.value.length > 0)
+)
+let followRaf = null
+function followTick() {
+  updateDatalistStyle()
+  followRaf = requestAnimationFrame(followTick)
+}
+function startFollow() {
+  if (followRaf == null) followRaf = requestAnimationFrame(followTick)
+}
+function stopFollow() {
+  if (followRaf != null) {
+    cancelAnimationFrame(followRaf)
+    followRaf = null
+  }
+}
+watch(listVisible, (v) => {
+  if (v) {
+    nextTick(() => { updateDatalistStyle(); startFollow() })
+  } else {
+    stopFollow()
+  }
+})
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocPointerDown)
+  window.addEventListener('resize', scheduleUpdate)
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', scheduleUpdate)
+    window.visualViewport.addEventListener('scroll', scheduleUpdate)
+  }
+})
+
+onBeforeUnmount(() => {
+  stopFollow()
+  document.removeEventListener('pointerdown', onDocPointerDown)
+  window.removeEventListener('resize', scheduleUpdate)
+  if (window.visualViewport) {
+    window.visualViewport.removeEventListener('resize', scheduleUpdate)
+    window.visualViewport.removeEventListener('scroll', scheduleUpdate)
+  }
 })
 
 // 暴露给父组件
