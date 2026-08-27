@@ -10,3 +10,5 @@ dist-ssr
 .vercel
 .workbuddy/
 previews/
+# 本地 wrangler 状态（含本地 D1 SQLite，不应入库）
+.wrangler/

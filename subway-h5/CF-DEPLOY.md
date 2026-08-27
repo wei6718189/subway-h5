@@ -85,6 +85,8 @@ npm run pages:dev:hmr             # 终端2：wrangler 代理到 4173，端口 8
 # 打开 http://localhost:8788
 ```
 
+> **手机/局域网访问**：脚本已带 `--ip 0.0.0.0`，wrangler 会监听所有网卡。手机与电脑同一 Wi-Fi 时，用电脑局域网 IP 访问，例如 `http://192.168.1.16:8788/guestbook.html`（IP 以你本机 `npm run dev` 输出的为准）。仅 `npm run dev`（Vite）默认就绑 0.0.0.0，但那只有前端、无后端，测留言必须走 8788。
+
 注意：
 - `wrangler pages dev` 需要本机已 `wrangler login`（首次创建 D1 时已登录）。
 - 本地 D1 为独立 SQLite（`.wrangler/state/`），与线上库**隔离**；本地测试数据不进线上。`ensureSchema` 会在首次调用时自动建表。
