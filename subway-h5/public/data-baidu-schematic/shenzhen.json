@@ -1243,7 +1243,7 @@
       ],
       "isTransfer": true,
       "labelOverride": {
-        "position": "tr",
+        "position": "tl",
         "distance": "near"
       }
     },
@@ -1257,7 +1257,7 @@
       ],
       "isTransfer": false,
       "labelOverride": {
-        "position": "bot",
+        "position": "top",
         "distance": "near"
       }
     },
@@ -2811,7 +2811,11 @@
       "lines": [
         "7号线(西丽线)"
       ],
-      "isTransfer": false
+      "isTransfer": false,
+      "labelOverride": {
+        "position": "top",
+        "distance": "near"
+      }
     },
     "皇岗村": {
       "id": "皇岗村",

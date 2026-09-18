@@ -83,14 +83,14 @@ const LABEL_OVERRIDES = {
     '龙城广场': { position: 'left', distance: 'near' },
     '南油西': { position: 'bot', distance: 'near' },
     '八卦岭': { position: 'top', distance: 'near' },
-    '华强北': { position: 'tr', distance: 'near' },
+    '华强北': { position: 'tl', distance: 'near' },
     // —— 第七批调整 ——
     '大芬': { position: 'right', distance: 'near' },
     '观城': { position: 'right', distance: 'near' },
     '木棉湾': { position: 'br', distance: 'near' },
     // —— 第八批调整 ——
     '晒布': { position: 'right', distance: 'near' },
-    '燕南': { position: 'bot', distance: 'near' },
+    '燕南': { position: 'top', distance: 'near' },
     '香蜜湖': { position: 'top', distance: 'near' },
     // —— 第九批调整 ——
     '华强路': { position: 'top', distance: 'near' },
@@ -98,7 +98,9 @@ const LABEL_OVERRIDES = {
     '安托山': { position: 'left', distance: 'near' },
     // —— 第十批调整 ——
     '凤凰城': { position: 'right', distance: 'near' },
-    '沙蚝': { position: 'right', distance: 'near' }
+    '沙蚝': { position: 'right', distance: 'near' },
+    // —— 第十一批调整 ——
+    '沙尾': { position: 'top', distance: 'near' }
   },
   guangzhou: {}
 }
