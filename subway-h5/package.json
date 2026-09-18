@@ -8,6 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview --host",
+    "pages:dev": "npm run build && wrangler pages dev --ip 0.0.0.0 --d1 DB=subway-h5-db",
+    "pages:dev:hmr": "wrangler pages dev --ip 0.0.0.0 --d1 DB=subway-h5-db --proxy 4173",
     "prepare:data": "node scripts/prepare-data/build_data.mjs",
     "prepare:data:sz": "node scripts/prepare-data/build_data.mjs shenzhen",
     "prepare:data:gz": "node scripts/prepare-data/build_data.mjs guangzhou",
